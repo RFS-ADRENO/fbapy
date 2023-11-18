@@ -35,36 +35,27 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
         "queries": '{"o0":{"doc_id":"3336396659757871","query_params":{"limit":1,"before":null,"tags":["INBOX"],"includeDeliveryReceipts":false,"includeSeqID":true}}}',
     }
 
-    def listen_mqtt():
+    def connect_mqtt():
+        print("Listening to MQTT...")
         message_emitter = EventEmitter()
-
-        if ctx["first_listen"] is False:
-            ctx["last_seq_id"] = None
-
-        ctx["sync_token"] = None
-        ctx["t_mqtt_called"] = True
-
-
-        if ctx["first_listen"] == False or ctx["last_seq_id"] is None:
-            get_seq_id()
 
         chat_on: bool = ctx["options"]["online"]
         foreground = False
 
-        session_id = random.randint(0, 9007199254740991)
+        session_id = random.randint(1, 9007199254740991)
         user = {
             "u": ctx["user_id"],
-            "S": session_id,
+            "s": session_id,
             "chat_on": chat_on,
             "fg": foreground,
             "d": get_guid(),
             "ct": "websocket",
             # App id from facebook
-            "aid": "219994525426954",
+            "aid": 219994525426954,
             "mqtt_sid": "",
             "cp": 3,
             "ecp": 10,
-            "st": [],
+            "st": topics,
             "pm": [],
             "dc": "",
             "no_auto_fg": True,
@@ -86,12 +77,10 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             cookie_str += cookie.name + "=" + cookie.value + "; "
 
         options = {
-            "clientId": "mqttwsclient",
-            "protocolId": "MQIsdp",
-            "protocolVersion": 3,
-            "username": json.dumps(user),
+            "client_id": "mqttwsclient",
+            "username": json.dumps(user, separators=(",", ":")),
             "clean": True,
-            "wsOptions": {
+            "ws_options": {
                 "headers": {
                     "Cookie": cookie_str,
                     "Origin": "https://www.facebook.com",
@@ -99,25 +88,38 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                     "Referer": "https://www.facebook.com/",
                     "Host": "edge-chat.facebook.com",
                 },
-                "origin": "https://www.facebook.com",
-                "protocolVersion": 13,
             },
             "keepalive": 10,
-            "reschedulePings": False,
         }
 
-        ctx["mqtt_client"] = mqtt.Client(
-            client_id=options["clientId"],
-            clean_session=options["clean"],
-            protocol=mqtt.MQTTv311,
-            transport="websockets",
-        )
-
-        ctx["mqtt_client"].enable_logger()
-
-        def on_connect(client, userdata, flags, rc):
+        def on_connect(client: mqtt.Client, userdata, flags, rc):
             print("Connected with result code " + str(rc))
-            client.subscribe([(topic, 0) for topic in topics])
+
+            topic = None
+
+            queue = {
+                "sync_api_version": 10,
+                "max_deltas_able_to_process": 1000,
+                "delta_batch_size": 500,
+                "encoding": "JSON",
+                "entity_fbid": ctx["user_id"],
+            }
+
+            if ctx["sync_token"]:
+                topic = "/messenger_sync_get_diffs"
+                queue["last_seq_id"] = ctx["last_seq_id"]
+                queue["sync_token"] = ctx["sync_token"]
+            else:
+                topic = "/messenger_sync_create_queue"
+                queue["initial_titan_sequence_id"] = ctx["last_seq_id"]
+                queue["device_params"] = None
+
+            client.publish(
+                topic=topic,
+                payload=json.dumps(queue, separators=(",", ":")),
+                qos=1,
+                retain=False,
+            )
 
         def on_message(client, userdata, msg):
             print(msg.topic + " " + str(msg.payload))
@@ -135,34 +137,56 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
         def on_log(client, userdata, level, buf):
             print("Log: " + str(buf))
 
-        ctx["mqtt_client"].on_connect = on_connect
-        ctx["mqtt_client"].on_message = on_message
-        ctx["mqtt_client"].on_disconnect = on_disconnect
-        ctx["mqtt_client"].on_subscribe = on_subscribe
-        ctx["mqtt_client"].on_unsubscribe = on_unsubscribe
-        ctx["mqtt_client"].on_log = on_log
+        c_mqtt = mqtt.Client(
+            client_id=options["client_id"],
+            clean_session=options["clean"],
+            protocol=mqtt.MQTTv31,
+            transport="websockets",
+        )
 
-        ctx["mqtt_client"].tls_set()
-        print(json.dumps(user, indent=4))
-        ctx["mqtt_client"].username_pw_set(username=json.dumps(user, separators=(",", ":")))
+        ctx["mqtt_client"] = c_mqtt
+
+        c_mqtt.tls_set()
+        # c_mqtt.enable_logger()
+
+        c_mqtt.on_connect = on_connect
+        c_mqtt.on_message = on_message
+        c_mqtt.on_disconnect = on_disconnect
+        c_mqtt.on_subscribe = on_subscribe
+        c_mqtt.on_unsubscribe = on_unsubscribe
+        # c_mqtt.on_log = on_log
+
+        c_mqtt.username_pw_set(username=options["username"])
 
         parsed_host = urlparse(host)
 
-        ctx["mqtt_client"].ws_set_options(
-            path= f"{parsed_host.path}?{parsed_host.query}",
-            headers=options["wsOptions"]["headers"],
+        c_mqtt.ws_set_options(
+            path=f"{parsed_host.path}?{parsed_host.query}",
+            headers=options["ws_options"]["headers"],
         )
-        
+
         # connect
-        ctx["mqtt_client"].connect(
-            host=options["wsOptions"]["headers"]["Host"],
+        c_mqtt.connect(
+            host=options["ws_options"]["headers"]["Host"],
             port=443,
             keepalive=options["keepalive"],
         )
-        ctx["mqtt_client"].loop_forever()
+        c_mqtt.loop_forever()
+
+    def listen_mqtt():
+        if ctx["first_listen"] is False:
+            ctx["last_seq_id"] = None
+
+        ctx["sync_token"] = None
+
+        if ctx["first_listen"] is False or ctx["last_seq_id"] is None:
+            get_seq_id()
+        else:
+            connect_mqtt()
+
+        ctx["first_listen"] = False
 
     def get_seq_id():
-        ctx["t_mqtt_called"] = False
         res: Response = default_funcs.post_with_defaults(
             "https://www.facebook.com/api/graphqlbatch/", form_get_seq_id
         )
@@ -187,7 +211,7 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                     ]["sync_sequence_id"]
 
                     ctx["last_seq_id"] = sync_sequence_id
-                    listen_mqtt()
+                    connect_mqtt()
                 except:
                     raise Exception("getSeqId: no sync_sequence_id found.")
         except Exception as e:

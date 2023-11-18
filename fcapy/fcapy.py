@@ -50,8 +50,6 @@ class Client:
         url = "https://www.facebook.com/"
         self.headers = utils.get_headers(url, self.options)
 
-        print(json.dumps(self.headers, indent=4))
-
         res = self.session.get(url, headers=self.headers, timeout=60)
 
         reg = r'<meta http-equiv="refresh" content="0;url=([^"]+)[^>]+>'

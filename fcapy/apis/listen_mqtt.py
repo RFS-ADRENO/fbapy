@@ -146,7 +146,7 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         ctx["mqtt_client"] = c_mqtt
 
-        c_mqtt.tls_set()
+        c_mqtt.tls_set(certfile=None, keyfile=None, cert_reqs=ssl.CERT_NONE, tls_version=ssl.PROTOCOL_TLSv1_2)
         # c_mqtt.enable_logger()
 
         c_mqtt.on_connect = on_connect

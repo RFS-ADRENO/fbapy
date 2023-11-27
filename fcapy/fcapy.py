@@ -4,12 +4,11 @@ from fcapy.api import API
 import re
 import random
 from urllib.parse import urlparse, parse_qs
-import json
 
 
 default_options = {
-    "selfListen": False,
-    "listenEvents": True,
+    "self_listen": False,
+    "listen_events": True,
     "listenTyping": False,
     "updatePresence": False,
     "forceLogin": False,
@@ -63,10 +62,6 @@ class Client:
 
         if not self.is_login():
             return None
-        
-		    # save html
-        with open("index.html", "w", encoding='utf-8') as f:
-            f.write(res.text)
 
         (ctx, defailt_funcs, api) = self.build_API(res.text)
 

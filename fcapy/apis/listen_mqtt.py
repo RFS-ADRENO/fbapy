@@ -1,10 +1,45 @@
-from ..utils import DefaultFuncs, parse_and_check_login, EventEmitter, get_guid
+from ..utils import DefaultFuncs, parse_and_check_login, get_guid, format_delta_message
 from requests import Response
 import json
 import random
 import paho.mqtt.client as mqtt
-import time
 from urllib.parse import urlparse
+from typing import Callable
+
+
+def parse_delta(delta: dict, ctx: dict) -> dict:
+    if "class" not in delta:
+        return {"type": "unknown", "data": delta}
+    
+    def resolve_attachment_url(i: int):
+        if "attachments" not in delta:
+            return None # I wonder if this will ever happen
+        
+        if len(delta["attachments"]) == i:
+            formatted = format_delta_message(delta)
+
+            if ctx["options"]["self_listen"] is not True and formatted["sender_id"] == formatted["thread_id"]:
+                return None
+            
+        elif delta["attachments"][i]["mercury"].get("attach_type") == "photo":
+            try:
+                res = ctx["api"].resolve_photo_url(delta["attachments"][i]["fbid"])
+                delta["attachments"][i]["mercury"]["metadata"]["url"] = res
+            except:
+              pass
+
+            resolve_attachment_url(i + 1)
+        else:
+            resolve_attachment_url(i + 1)
+
+    resolve_attachment_url(0)
+    
+    if delta["class"] == "NewMessage":
+        return format_delta_message(delta)
+        
+
+    pass
+
 
 topics = [
     "/legacy_web",
@@ -37,7 +72,6 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
     def connect_mqtt():
         print("Listening to MQTT...")
-        message_emitter = EventEmitter()
 
         chat_on: bool = ctx["options"]["online"]
         foreground = False
@@ -121,9 +155,38 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                 retain=False,
             )
 
-        def on_message(client, userdata, msg):
-            print(msg.topic + " " + str(msg.payload))
-            message_emitter.emit(msg.topic, msg.payload)
+            def dcn_timeout():
+                client.disconnect()
+                get_seq_id()
+
+        def parse_mqtt_payload(payload: bytes | bytearray) -> dict:
+            payload_str = payload.decode("utf-8")
+
+            if payload_str[0] == "{":
+                return json.loads(payload_str)
+            else:
+                return {"t": payload_str}
+
+        def on_message(client, userdata, msg: mqtt.MQTTMessage):
+            if msg.topic == "/t_ms":
+                parsed = parse_mqtt_payload(msg.payload)
+
+                if "firstDeltaSeqId" in parsed and "syncToken" in parsed:
+                    ctx["last_seq_id"] = parsed["firstDeltaSeqId"]
+                    ctx["sync_token"] = parsed["syncToken"]
+
+                if "lastIssuedSeqId" in parsed:
+                    ctx["last_seq_id"] = parsed["lastIssuedSeqId"]
+
+                if "deltas" in parsed:
+                    deltas: list = parsed["deltas"]
+
+                    for delta in deltas:
+                        parsed_delta = parse_delta(delta, ctx)
+                        ctx["callback"](parsed_delta)
+
+            else:
+                pass
 
         def on_disconnect(client, userdata, rc):
             print("Disconnected with result code " + str(rc))
@@ -133,9 +196,6 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         def on_unsubscribe(client, userdata, mid):
             print("Unsubscribed: " + str(mid))
-
-        def on_log(client, userdata, level, buf):
-            print("Log: " + str(buf))
 
         c_mqtt = mqtt.Client(
             client_id=options["client_id"],
@@ -147,14 +207,13 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
         ctx["mqtt_client"] = c_mqtt
 
         c_mqtt.tls_set()
-        # c_mqtt.enable_logger()
+        c_mqtt.tls_insecure_set(True)
 
         c_mqtt.on_connect = on_connect
         c_mqtt.on_message = on_message
         c_mqtt.on_disconnect = on_disconnect
         c_mqtt.on_subscribe = on_subscribe
         c_mqtt.on_unsubscribe = on_unsubscribe
-        # c_mqtt.on_log = on_log
 
         c_mqtt.username_pw_set(username=options["username"])
 
@@ -171,9 +230,15 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             port=443,
             keepalive=options["keepalive"],
         )
-        c_mqtt.loop_forever()
 
-    def listen_mqtt():
+        try:
+            c_mqtt.loop_forever()
+        except KeyboardInterrupt:
+            c_mqtt.disconnect()
+
+    def listen_mqtt(callback: Callable):
+        ctx["callback"] = callback
+
         if ctx["first_listen"] is False:
             ctx["last_seq_id"] = None
 

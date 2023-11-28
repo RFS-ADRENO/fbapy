@@ -364,21 +364,17 @@ def _format_attachment(
             "type": "sticker",
             "id": str(attachment_one["metadata"]["stickerID"]),
             "url": attachment_one["url"],
-
             "pack_id": str(attachment_one["metadata"]["packID"]),
             "sprite_url": attachment_one["metadata"]["spriteURI"],
             "sprite_url_2x": attachment_one["metadata"]["spriteURI2x"],
             "width": attachment_one["metadata"]["width"],
             "height": attachment_one["metadata"]["height"],
-
             "caption": attachment_two["caption"],
             "description": attachment_two["description"],
-
             "frame_count": attachment_one["metadata"]["frameCount"],
             "frame_rate": attachment_one["metadata"]["frameRate"],
             "frames_per_row": attachment_one["metadata"]["framesPerRow"],
             "frames_per_col": attachment_one["metadata"]["framesPerCol"],
-
             "sticker_id": str(attachment_one["metadata"]["stickerID"]),
             "sprite_uri": attachment_one["metadata"]["spriteURI"],
             "sprite_uri_2x": attachment_one["metadata"]["spriteURI2x"],
@@ -389,10 +385,8 @@ def _format_attachment(
             "filename": attachment_one["name"],
             "id": str(attachment_two["id"]),
             "url": attachment_one["url"],
-
             "is_malicious": attachment_two["is_malicious"],
             "content_type": attachment_two["mime_type"],
-
             "name": attachment_one["name"],
             "mime_type": attachment_two["mime_type"],
             "file_size": attachment_two["file_size"],
@@ -403,15 +397,12 @@ def _format_attachment(
             "id": str(attachment_one["metadata"]["fbid"]),
             "filename": attachment_one["fileName"],
             "thumbnail_url": attachment_one["thumbnail_url"],
-
             "preview_url": attachment_one["preview_url"],
             "preview_width": attachment_one["preview_width"],
             "preview_height": attachment_one["preview_height"],
-
             "large_preview_url": attachment_one["large_preview_url"],
             "large_preview_width": attachment_one["large_preview_width"],
             "large_preview_height": attachment_one["large_preview_height"],
-
             "url": attachment_one["metadata"]["url"],
             "width": attachment_one["metadata"]["dimensions"].split(",")[0],
             "height": attachment_one["metadata"]["dimensions"].split(",")[1],
@@ -422,15 +413,12 @@ def _format_attachment(
             "type": "animated_image",
             "id": str(attachment_two["id"]),
             "filename": attachment_two["filename"],
-
             "preview_url": attachment_one["preview_url"],
             "preview_width": attachment_one["preview_width"],
             "preview_height": attachment_one["preview_height"],
-
             "url": attachment_two["image_data"]["url"],
             "width": attachment_two["image_data"]["width"],
             "height": attachment_two["image_data"]["height"],
-
             "name": attachment_one["name"],
             "facebook_url": attachment_one["url"],
             "thumbnail_url": attachment_one["thumbnail_url"],
@@ -438,30 +426,32 @@ def _format_attachment(
             "raw_gif_image": attachment_two["image_data"]["raw_gif_image"],
             "raw_webp_image": attachment_two["image_data"]["raw_webp_image"],
             "animated_gif_url": attachment_two["image_data"]["animated_gif_url"],
-            "animated_gif_preview_url": attachment_two["image_data"]["animated_gif_preview_url"],
+            "animated_gif_preview_url": attachment_two["image_data"][
+                "animated_gif_preview_url"
+            ],
             "animated_webp_url": attachment_two["image_data"]["animated_webp_url"],
-            "animated_webp_preview_url": attachment_two["image_data"]["animated_webp_preview_url"],
+            "animated_webp_preview_url": attachment_two["image_data"][
+                "animated_webp_preview_url"
+            ],
         }
     elif _type == "share":
         return {
             "type": "share",
             "id": str(attachment_one["share"]["share_id"]),
             "url": attachment_two["href"],
-            
             "title": attachment_one["share"]["title"],
             "description": attachment_one["share"]["description"],
             "source": attachment_one["share"]["source"],
-
             "image": attachment_one["share"]["media"]["image"],
             "width": attachment_one["share"]["media"]["image_size"]["width"],
             "height": attachment_one["share"]["media"]["image_size"]["height"],
             "playable": attachment_one["share"]["media"]["playable"],
             "duration": attachment_one["share"]["media"]["duration"],
-
             "subattachments": attachment_one["share"]["subattachments"],
             "properties": {},
-
-            "animated_image_size": attachment_one["share"]["media"]["animated_image_size"],
+            "animated_image_size": attachment_one["share"]["media"][
+                "animated_image_size"
+            ],
             "facebook_url": attachment_one["share"]["uri"],
             "target": attachment_one["share"]["target"],
             "style_list": attachment_one["share"]["style_list"],
@@ -471,18 +461,14 @@ def _format_attachment(
             "type": "video",
             "id": str(attachment_one["metadata"]["fbid"]),
             "filename": attachment_one["name"],
-
             "preview_url": attachment_one["preview_url"],
             "preview_width": attachment_one["preview_width"],
             "preview_height": attachment_one["preview_height"],
-
             "url": attachment_one["url"],
             "width": attachment_one["metadata"]["dimensions"].split(",")[0],
             "height": attachment_one["metadata"]["dimensions"].split(",")[1],
-
             "duration": attachment_one["metadata"]["duration"],
             "video_type": "unknown",
-
             "thumbnail_url": attachment_one["thumbnail_url"],
         }
     elif _type == "MessageImage":
@@ -491,15 +477,12 @@ def _format_attachment(
             "id": str(blob["legacy_attachment_id"]),
             "filename": blob["filename"],
             "thumbnail_url": blob["thumbnail"]["uri"],
-
             "preview_url": blob["preview"]["uri"],
             "preview_width": blob["preview"]["width"],
             "preview_height": blob["preview"]["height"],
-
             "large_preview_url": blob["large_preview"]["uri"],
             "large_preview_width": blob["large_preview"]["width"],
             "large_preview_height": blob["large_preview"]["height"],
-
             "url": blob["large_preview"]["uri"],
             "width": blob["original_dimensions"]["x"],
             "height": blob["original_dimensions"]["y"],
@@ -510,15 +493,12 @@ def _format_attachment(
             "type": "animated_image",
             "id": str(blob["legacy_attachment_id"]),
             "filename": blob["filename"],
-
             "preview_url": blob["preview_image"]["uri"],
             "preview_width": blob["preview_image"]["width"],
             "preview_height": blob["preview_image"]["height"],
-
             "url": blob["animated_image"]["uri"],
             "width": blob["animated_image"]["width"],
             "height": blob["animated_image"]["height"],
-
             "thumbnail_url": blob["preview_image"]["uri"],
             "name": blob["filename"],
             "facebook_url": blob["animated_image"]["uri"],
@@ -533,18 +513,14 @@ def _format_attachment(
             "type": "video",
             "id": str(blob["legacy_attachment_id"]),
             "filename": blob["filename"],
-
             "preview_url": blob["large_image"]["uri"],
             "preview_width": blob["large_image"]["width"],
             "preview_height": blob["large_image"]["height"],
-
             "url": blob["playable_url"],
             "width": blob["original_dimensions"]["x"],
             "height": blob["original_dimensions"]["y"],
-
             "duration": blob["playable_duration_in_ms"],
             "video_type": blob["video_type"].lower(),
-
             "thumbnail_url": blob["large_image"]["uri"],
         }
     elif _type == "MessageAudio":
@@ -552,11 +528,9 @@ def _format_attachment(
             "type": "audio",
             "id": str(blob.get("legacy_attachment_id")),
             "filename": blob["filename"],
-
             "audio_type": blob["audio_type"],
             "duration": blob["playable_duration_in_ms"],
             "url": blob["playable_url"],
-
             "is_voicemail": blob["is_voicemail"],
         }
     elif _type == "StickerAttachment":
@@ -564,21 +538,17 @@ def _format_attachment(
             "type": "sticker",
             "id": str(blob["id"]),
             "url": blob["url"],
-
             "pack_id": blob["pack"]["id"] if "pack" in blob else None,
             "sprite_url": blob["sprite_image"],
             "sprite_url_2x": blob["sprite_image_2x"],
             "width": blob["width"],
             "height": blob["height"],
-
             "caption": blob["label"],
             "description": blob["label"],
-
             "frame_count": blob["frame_count"],
             "frame_rate": blob["frame_rate"],
             "frames_per_row": blob["frames_per_row"],
             "frames_per_col": blob["frames_per_column"],
-
             "sticker_id": blob["id"],
             "sprite_uri": blob["sprite_image"],
             "sprite_uri_2x": blob["sprite_image_2x"],
@@ -593,13 +563,13 @@ def _format_attachment(
 
         latitude = None
         longitude = None
-        
+
         try:
             latitude = float(address[0])
             longitude = float(address[1])
         except:
             pass
-        
+
         image_url = None
         width = None
         height = None
@@ -619,7 +589,6 @@ def _format_attachment(
             "height": height,
             "url": u or url_attach,
             "address": where1,
-
             "facebook_url": blob["story_attachment"]["url"],
             "target": blob["story_attachment"]["target"],
             "style_list": blob["story_attachment"]["style_list"],
@@ -630,55 +599,43 @@ def _format_attachment(
         for cur in blob["story_attachment"]["properties"]:
             properties[cur["key"]] = cur["value"]["text"]
 
+        media_exists = "media" in blob["story_attachment"] and blob["story_attachment"]["media"] is not None
+        image_exists = media_exists and "image" in blob["story_attachment"]["media"]
+
+        story_attm = blob["story_attachment"]
+        media = blob["story_attachment"]["media"] if media_exists else None
+
         return {
             "type": "share",
             "id": blob["legacy_attachment_id"],
-            "url": blob["story_attachment"]["url"],
-
-            "title": blob["story_attachment"]["title_with_entities"]["text"],
-            "description": blob["story_attachment"]["description"]["text"]
-            if "description" in blob["story_attachment"]
+            "url": story_attm.get("url"),
+            "title": story_attm["title_with_entities"].get("text"),
+            "description": story_attm["description"].get("text")
+            if "description" in story_attm
             else None,
-            "source": blob["story_attachment"]["source"]["text"]
-            if "source" in blob["story_attachment"]
+            "source": story_attm["source"].get("text")
+            if "source" in story_attm
             else None,
-
-            "image": blob["story_attachment"]["media"]["image"]["uri"]
-            if "image" in blob["story_attachment"]["media"]
-            else None,
-            "width": blob["story_attachment"]["media"]["image"]["width"]
-            if "image" in blob["story_attachment"]["media"]
-            else None,
-            "height": blob["story_attachment"]["media"]["image"]["height"]
-            if "image" in blob["story_attachment"]["media"]
-            else None,
-            "playable": blob["story_attachment"]["media"]["is_playable"]
-            if "media" in blob["story_attachment"]
-            else None,
-            "duration": blob["story_attachment"]["media"]["playable_duration_in_ms"]
-            if "media" in blob["story_attachment"]
-            else None,
-            "playable_url": blob["story_attachment"]["media"]["playable_url"]
-            if "media" in blob["story_attachment"]
-            else None,
-
-            "subattachments": blob["story_attachment"]["subattachments"],
+            "image": media["image"].get("uri") if image_exists else None,
+            "width": media["image"].get("width") if image_exists else None,
+            "height": media["image"].get("height") if image_exists else None,
+            "playable": media.get("is_playable") if media_exists else None,
+            "duration": media.get("playable_duration_in_ms") if media_exists else None,
+            "playable_url": media.get("playable_url") if media_exists else None,
+            "subattachments": story_attm.get("subattachments"),
             "properties": properties,
-
-            "facebook_url": blob["story_attachment"]["url"],
-            "target": blob["story_attachment"]["target"],
-            "style_list": blob["story_attachment"]["style_list"],
+            "facebook_url": story_attm.get("url"),
+            "target": story_attm.get("target"),
+            "style_list": story_attm.get("style_list"),
         }
     elif _type == "MessageFile":
         return {
             "type": "file",
             "filename": blob["filename"],
             "id": blob["message_file_fbid"],
-
             "url": blob["url"],
             "is_malicious": blob["is_malicious"],
             "content_type": blob["content_type"],
-
             "name": blob["filename"],
             "mime_type": "",
             "file_size": -1,
@@ -696,3 +653,41 @@ def _format_attachment(
             "attachment_one": attachment_one,
             "attachment_two": attachment_two,
         }
+
+
+def decode_client_payload(payload):
+    def utf8_array_to_str(array):
+        out = ""
+        i = 0
+        length = len(array)
+
+        while i < length:
+            c = array[i]
+            i += 1
+            if (
+                c >> 4 == 0
+                or c >> 4 == 1
+                or c >> 4 == 2
+                or c >> 4 == 3
+                or c >> 4 == 4
+                or c >> 4 == 5
+                or c >> 4 == 6
+                or c >> 4 == 7
+            ):
+                out += chr(c)
+            elif c >> 4 == 12 or c >> 4 == 13:
+                char2 = array[i]
+                i += 1
+                out += chr(((c & 0x1F) << 6) | (char2 & 0x3F))
+            elif c >> 4 == 14:
+                char2 = array[i]
+                i += 1
+                char3 = array[i]
+                i += 1
+                out += chr(
+                    ((c & 0x0F) << 12) | ((char2 & 0x3F) << 6) | ((char3 & 0x3F) << 0)
+                )
+
+        return out
+
+    return json.loads(utf8_array_to_str(payload))

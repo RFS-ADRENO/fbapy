@@ -1,4 +1,4 @@
-from ..utils import (
+from .._utils import (
     DefaultFuncs,
     parse_and_check_login
 )

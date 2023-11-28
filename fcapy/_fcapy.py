@@ -1,6 +1,6 @@
 from requests import Session
-import fcapy.utils as utils
-from fcapy.api import API
+from ._utils import base64_decode, get_headers, DefaultFuncs
+from ._api import API
 import re
 import random
 from urllib.parse import urlparse, parse_qs
@@ -36,7 +36,7 @@ class Client:
         :param options: fca options
         """
 
-        appstateList = utils.base64_decode(appstate)
+        appstateList = base64_decode(appstate)
 
         for each in appstateList:
             self.session.cookies.set(
@@ -47,7 +47,7 @@ class Client:
             self.options[key] = options[key]
 
         url = "https://www.facebook.com/"
-        self.headers = utils.get_headers(url, self.options)
+        self.headers = get_headers(url, self.options)
 
         res = self.session.get(url, headers=self.headers, timeout=60)
 
@@ -57,7 +57,7 @@ class Client:
         redirect = pattern.search(res.text)
         
         if redirect and redirect.group(1):
-            self.headers = utils.get_headers(redirect.group(1), self.options)
+            self.headers = get_headers(redirect.group(1), self.options)
             res = self.session.get(redirect.group(1), headers=self.headers, timeout=60)
 
         if not self.is_login():
@@ -81,7 +81,7 @@ class Client:
 
         return True
 
-    def build_API(self, html: str) -> tuple[dict[str, any], utils.DefaultFuncs, API]:
+    def build_API(self, html: str) -> tuple[dict[str, any], DefaultFuncs, API]:
         cookies: list = []
 
         for cookie in self.session.cookies:
@@ -173,7 +173,7 @@ class Client:
             "options": self.options,
         }
 
-        default_funcs = utils.DefaultFuncs(self.session, html, self.user_id, ctx)
+        default_funcs = DefaultFuncs(self.session, html, self.user_id, ctx)
         api = API(default_funcs, ctx)
 
         return ctx, default_funcs, api

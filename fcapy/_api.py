@@ -1,8 +1,5 @@
-from fcapy.utils import DefaultFuncs
-
-from fcapy.apis.send_message import send_message
-from fcapy.apis.listen_mqtt import listen_mqtt
-from fcapy.apis.resolve_photo_url import resolve_photo_url
+from ._utils import DefaultFuncs
+from ._apis import *
 
 class API:
     def __init__(self, default_funcs: DefaultFuncs, ctx: dict):

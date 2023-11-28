@@ -1,4 +1,4 @@
-from ..utils import DefaultFuncs, generate_offline_threading_id, generate_timestamp_relative, generate_threading_id, get_signature_id
+from .._utils import DefaultFuncs, generate_offline_threading_id, generate_timestamp_relative, generate_threading_id, get_signature_id
 import time
 from requests import Response
 
@@ -14,7 +14,6 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
 				form["other_user_fbid"] = thread_id
 
 			res: Response = default_funcs.post_with_defaults("https://www.facebook.com/messaging/send/", form)
-			print(res.text)
 				
 
 		def send(msg: str | dict, thread_id: str, reply_to_message: str = None, is_group: bool = None):

@@ -9,15 +9,15 @@ from urllib.parse import urlparse, parse_qs
 default_options = {
     "self_listen": False,
     "listen_events": True,
-    "listenTyping": False,
-    "updatePresence": False,
-    "forceLogin": False,
-    "autoMarkDelivery": True,
-    "autoMarkRead": False,
-    "autoReconnect": True,
-    "logRecordSize": 100,
+    "listen_typing": False,
+    "update_presence": False,
+    "force_login": False,
+    "auto_mark_delivery": True,
+    "auto_mark_read": False,
+    "auto_reconnect": True,
+    "log_record_size": 100,
     "online": True,
-    "emitReady": False,
+    "emit_ready": False,
     "user_agent": "Mozilla/5.0 (Linux; Android 9; SM-G973U Build/PPR1.180610.011) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Mobile Safari/537.36",
 }
 

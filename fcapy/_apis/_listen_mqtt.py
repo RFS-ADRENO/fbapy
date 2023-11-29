@@ -280,7 +280,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         dict_to_return["delta"] = delta
 
                     if ctx["options"]["self_listen"] is not True:
-                        if dict_to_return["sender_id"] == dict_to_return["thread_id"]:
+                        if dict_to_return["sender_id"] == ctx["user_id"]:
                             return None
 
                     return dict_to_return

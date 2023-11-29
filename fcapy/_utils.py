@@ -614,7 +614,7 @@ def _format_attachment(
             if "description" in story_attm
             else None,
             "source": story_attm["source"].get("text")
-            if "source" in story_attm
+            if "source" in story_attm and story_attm["source"] is not None
             else None,
             "image": media["image"].get("uri") if image_exists else None,
             "width": media["image"].get("width") if image_exists else None,

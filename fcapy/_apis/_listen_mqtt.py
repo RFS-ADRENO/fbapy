@@ -28,7 +28,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
 
             if (
                 ctx["options"]["self_listen"] is not True
-                and formatted["sender_id"] == formatted["thread_id"]
+                and formatted["sender_id"] == ctx["user_id"]
             ):
                 return None
 

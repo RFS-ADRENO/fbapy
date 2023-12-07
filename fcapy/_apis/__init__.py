@@ -5,3 +5,5 @@ from ._change_emoji import change_emoji
 from ._unsend_message import unsend_message
 from ._change_nickname import change_nickname
 from ._read_status import read_status
+from ._set_typing import set_typing
+from ._create_new_group import create_new_group

@@ -12,3 +12,5 @@ class API:
         self.unsend_message  = unsend_message(default_funcs, ctx)
         self.change_nickname  = change_nickname(default_funcs, ctx)
         self.read_status  = read_status(default_funcs, ctx)
+        self.set_typing  = set_typing(default_funcs, ctx)
+        self.create_new_group  = create_new_group(default_funcs, ctx)

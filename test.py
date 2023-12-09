@@ -27,6 +27,12 @@ def callback(event, api: API):
             api.send_message("pong", event["thread_id"], event["message_id"])
           elif body == PREFIX + "hi":
             api.send_message("hello", event["thread_id"], event["message_id"])
+          elif body == PREFIX + "meow":
+            api.send_message({"sticker": "554423694645485"}, event["thread_id"], event["message_id"])
+          elif body == PREFIX + "where":
+            api.send_message({"location": {"latitude": 10.764461306457537, "longitude": 106.66615124288597}}, event["thread_id"], event["message_id"])
+          elif body == PREFIX + "share":
+            api.share_story("Hello world")
           else:
             api.send_message("Unknown command", event["thread_id"], event["message_id"])
 
@@ -37,8 +43,12 @@ def callback(event, api: API):
             else:
               print(f"Attachment: {attachment['type']} - {attachment['preview_url']}")
 
+            if attachment['type'] == "sticker":
+              print("Sticker ID:", attachment['sticker_id'])
+
 
   except Exception as e:
+    print(e)
     print(event)
 
 api.listen_mqtt(callback)

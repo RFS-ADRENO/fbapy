@@ -8,3 +8,5 @@ from ._read_status import read_status
 from ._set_typing import set_typing
 from ._create_new_group import create_new_group
 from ._share_story import share_story
+from ._set_pfp import set_pfp
+from ._send_message_mqtt import send_message_mqtt

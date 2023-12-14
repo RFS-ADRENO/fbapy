@@ -15,3 +15,5 @@ class API:
         self.set_typing  = set_typing(default_funcs, ctx)
         self.create_new_group  = create_new_group(default_funcs, ctx)
         self.share_story  = share_story(default_funcs, ctx)
+        self.set_pfp = set_pfp(default_funcs, ctx)
+        self.send_message_mqtt = send_message_mqtt(default_funcs, ctx)

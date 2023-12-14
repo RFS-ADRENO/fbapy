@@ -34,7 +34,10 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
 
             return formatted
 
-        elif delta["attachments"][i]["mercury"].get("attach_type") == "photo":
+        elif (
+            "mercury" in delta["attachments"][i]
+            and delta["attachments"][i]["mercury"].get("attach_type") == "photo"
+        ):
             try:
                 res = ctx["api"].resolve_photo_url(delta["attachments"][i]["fbid"])
                 delta["attachments"][i]["mercury"]["metadata"]["url"] = res
@@ -289,6 +292,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
 
 
 topics = [
+    "/ls_resp",
     "/legacy_web",
     "/webrtc",
     "/rtc_multi",
@@ -332,7 +336,7 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             "d": get_guid(),
             "ct": "websocket",
             # App id from facebook
-            "aid": 219994525426954,
+            "aid": 5094267961737215,
             "mqtt_sid": "",
             "cp": 3,
             "ecp": 10,
@@ -433,8 +437,10 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                         if parsed_delta is not None:
                             ctx["callback"](parsed_delta, ctx["api"])
 
-            else:
-                pass
+            elif msg.topic == "/ls_resp":
+                parsed = parse_mqtt_payload(msg.payload)
+
+                print(parsed)
 
         def on_disconnect(client, userdata, rc):
             print("Disconnected with result code " + str(rc))
@@ -508,7 +514,12 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             data = parse_and_check_login(res, ctx, default_funcs)
 
             if type(data) != list:
-                raise Exception("Not logged in")
+                raise Exception(
+                    {
+                        "error": "Not logged in",
+                        "res": data,
+                    }
+                )
             else:
                 last_data = data[len(data) - 1]
 
@@ -516,7 +527,12 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                     raise data[0].o0.errors
 
                 if last_data["successful_results"] == 0:
-                    raise Exception("getSeqId: there was no successful_results")
+                    raise Exception(
+                        {
+                            "error": "getSeqId: there was no successful_results",
+                            "res": data,
+                        }
+                    )
 
                 try:
                     sync_sequence_id = data[0]["o0"]["data"]["viewer"][
@@ -526,9 +542,15 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                     ctx["last_seq_id"] = sync_sequence_id
                     connect_mqtt()
                 except:
-                    raise Exception("getSeqId: no sync_sequence_id found.")
+                    raise Exception(
+                        {"error": "getSeqId: no sync_sequence_id found.", "res": data}
+                    )
         except Exception as e:
-            if "Not logged in" in str(e):
+            if (
+                type(e.args[0]) == dict
+                and "error" in e.args[0]
+                and e.args[0]["error"] == "Not logged in"
+            ):
                 ctx["logged_in"] = False
 
             raise e

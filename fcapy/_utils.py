@@ -93,22 +93,27 @@ class DefaultFuncs:
         )
 
     def post_with_defaults(self, url: str, form: dict, ctxx: dict = {}):
+        abc = self.merge_with_defaults(form)
+        # print(json.dumps(abc, indent=4))
         return self.session.post(
             url,
-            data=self.merge_with_defaults(form),
+            data=abc,
             headers=get_headers(url, ctx=ctxx),
             timeout=60,
         )
 
     def post_form_data_with_default(
-        self, url: str, form: dict, qs: dict, ctxx: dict = {}
+        self, url: str, form: dict, qs: dict = {}, ctxx: dict = {}, files: dict = {}
     ):
+        headers = get_headers(url, ctx=ctxx)
+        del headers["Content-Type"]
         return self.session.post(
             url,
             data=self.merge_with_defaults(form),
             params=self.merge_with_defaults(qs),
-            headers=get_headers(url, ctx=ctxx),
+            headers=headers,
             timeout=60,
+            files=files,
         )
 
 
@@ -180,7 +185,11 @@ def parse_and_check_login(
 ):
     if res.status_code >= 500 and res.status_code <= 600:
         if retry_count >= 5:
-            raise Exception("Request retry limit exceeded")
+            raise Exception({
+                "error": "Request retry failed. Check the `res` and `statusCode` property on this error.",
+                "status_code": res.status_code,
+                "res": res.text
+            })
 
         retry_time = random.randint(0, 5000)
 
@@ -208,24 +217,88 @@ def parse_and_check_login(
             f"parseAndCheckLogin got status code: {res.status_code}. Bailing out of trying to parse response."
         )
 
-    data = None
     try:
-        data = json.loads(make_parsable(res.text))
-    except:
-        raise Exception("Could not parse response")
+        res: dict = json.loads(make_parsable(res.text))
+        res = res.get("temp") or res
+    except Exception as e:
+        raise Exception({
+            "error": "JSON.parse error. Check the `detail` property on this error.",
+            "detail": e,
+            "res": res.text
+        })
 
-    return data
+    # In some cases the response contains only a redirect URL which should be followed
+    if "redirect" in res and res["redirect"] and res["request"]["method"] == "GET":
+        res = default_funcs.get_with_defaults(res["redirect"], {}, ctx)
+        return parse_and_check_login(res, ctx, default_funcs)
+
+    if (
+        "jsmods" in res
+        and "require" in res["jsmods"]
+        and isinstance(res["jsmods"]["require"], list)
+        and len(res["jsmods"]["require"]) > 0
+        and isinstance(res["jsmods"]["require"][0], list)
+        and len(res["jsmods"]["require"][0]) > 0
+        and res["jsmods"]["require"][0][0] == "Cookie"
+    ):
+        res["jsmods"]["require"][0][3][0] = res["jsmods"]["require"][0][3][0].replace(
+            "_js_", ""
+        )
+        cookie = format_cookie(res["jsmods"]["require"][0][3], "facebook")
+        cookie2 = format_cookie(res["jsmods"]["require"][0][3], "messenger")
+
+        default_funcs.session.cookies.set(
+            cookie["name"],
+            cookie["value"],
+            path=cookie["path"],
+            domain=cookie["domain"],
+        )
+        default_funcs.session.cookies.set(
+            cookie2["name"],
+            cookie2["value"],
+            path=cookie2["path"],
+            domain=cookie2["domain"],
+        )
+
+    # On every request we check if we got a DTSG and we mutate the context so that we use the latest
+    # one for the next requests.
+    if (
+        "jsmods" in res
+        and isinstance(res["jsmods"], dict)
+        and "require" in res["jsmods"]
+        and isinstance(res["jsmods"]["require"], list)
+    ):
+        arr = res["jsmods"]["require"]
+        for i in range(0, len(arr)):
+            if arr[i][0] == "DTSG" and arr[i][1] == "setToken":
+                ctx["fb_dtsg"] = arr[i][3][0]
+
+                # Update ttstamp since that depends on fb_dtsg
+                ctx["ttstamp"] = "2"
+                for j in range(0, len(ctx["fb_dtsg"])):
+                    ctx["ttstamp"] += str(ord(ctx["fb_dtsg"][j]))
+
+    if "error" in res and res["error"] == 1357001:
+        raise Exception({
+            "error": "Not logged in."
+        })
+
+    return res
 
 
-def make_parsable(html):
+def make_parsable(html) -> str:
     without_for_loop = re.sub(r"for\s*\(\s*;\s*;\s*\)\s*;\s*", "", html)
 
     # Handling multiple JSON objects in the same response
     maybe_multiple_objects = re.split(r"\}\r\n *\{", without_for_loop)
     if len(maybe_multiple_objects) == 1:
-        return maybe_multiple_objects
+        return maybe_multiple_objects[0]
 
-    return "[" + "},{".join(maybe_multiple_objects) + "]"
+    return '{"temp":[' + "},{".join(maybe_multiple_objects) + "]}"
+
+
+def format_cookie(arr: list, url: str) -> dict:
+    return {"name": arr[0], "value": arr[1], "path": arr[3], "domain": url + ".com"}
 
 
 class EventEmitter:
@@ -346,6 +419,7 @@ def _format_attachment(
         if (
             "story_attachment" in attachment_one["extensible_attachment"]
             and "target" in attachment_one["extensible_attachment"]["story_attachment"]
+            and attachment_one["extensible_attachment"]["story_attachment"]["target"] is not None
             and "__typename"
             in attachment_one["extensible_attachment"]["story_attachment"]["target"]
             and attachment_one["extensible_attachment"]["story_attachment"]["target"][
@@ -538,7 +612,9 @@ def _format_attachment(
             "type": "sticker",
             "id": str(blob["id"]),
             "url": blob["url"],
-            "pack_id": blob["pack"]["id"] if "pack" in blob else None,
+            "pack_id": blob["pack"]["id"]
+            if "pack" in blob and blob["pack"] is not None
+            else None,
             "sprite_url": blob["sprite_image"],
             "sprite_url_2x": blob["sprite_image_2x"],
             "width": blob["width"],
@@ -599,7 +675,10 @@ def _format_attachment(
         for cur in blob["story_attachment"]["properties"]:
             properties[cur["key"]] = cur["value"]["text"]
 
-        media_exists = "media" in blob["story_attachment"] and blob["story_attachment"]["media"] is not None
+        media_exists = (
+            "media" in blob["story_attachment"]
+            and blob["story_attachment"]["media"] is not None
+        )
         image_exists = media_exists and "image" in blob["story_attachment"]["media"]
 
         story_attm = blob["story_attachment"]

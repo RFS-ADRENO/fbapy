@@ -5,6 +5,9 @@ from .._utils import (
     format_delta_message,
     decode_client_payload,
     _format_attachment,
+    format_delta_read_receipt,
+    format_delta_event,
+    format_id
 )
 from requests import Response
 import json
@@ -17,7 +20,7 @@ import re
 
 def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
     if "class" not in delta:
-        return {"type": "unknown", "data": delta}
+        return {"type": "unknown", "data": json.dumps(delta, indent=4)}
 
     def resolve_attachment_url(i: int):
         if "attachments" not in delta:
@@ -287,6 +290,218 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                             return None
 
                     return dict_to_return
+                elif "deltaUpdateThreadEmoji" in delta and listen_events:
+                    return {
+                        "type": "event",
+                        "thread_id": str(
+                            delta["deltaUpdateThreadEmoji"]["threadKey"].get(
+                                "threadFbId"
+                            )
+                            or delta["deltaUpdateThreadEmoji"]["threadKey"].get(
+                                "otherUserFbId"
+                            )
+                        ),
+                        "log_message_type": "log:thread-icon",
+                        "log_message_data": {
+                            "emoji": delta["deltaUpdateThreadEmoji"]["emoji"]
+                        },
+                        "participant_ids": [],
+                    }
+                elif "deltaUpdatePinnedMessagesV2" in delta and listen_events:
+                    return {
+                        "type": "event",
+                        "thread_id": str(
+                            delta["deltaUpdatePinnedMessagesV2"]["threadKey"].get(
+                                "threadFbId"
+                            ) or delta["deltaUpdatePinnedMessagesV2"]["threadKey"].get(
+                                "otherUserFbId"
+                            )
+                        ),
+                        "log_message_type": "log:thread-pinned-message",
+                        "log_message_data": {
+                            "newPinnedMessages": delta["deltaUpdatePinnedMessagesV2"]["newPinnedMessages"],
+                            "removedPinnedMessages": delta["deltaUpdatePinnedMessagesV2"]["removedPinnedMessages"],
+                        }
+                    }
+
+    # This is because the loop in the ClientPayload changes the delta, will refactor later.
+    # for now, just return None if the delta doesn't have a class key
+    if delta.get("class") is None:
+        print("Unknown delta: " + json.dumps(delta, indent=4))
+        return None
+    if delta["class"] != "NewMessage" and ctx["options"]["listen_events"] != True:
+        return None
+
+    if delta["class"] == "ReadReceipt":
+        fmt_msg = None
+
+        try:
+            fmt_msg = format_delta_read_receipt(delta)
+        except e:
+            raise Exception(
+                {
+                    "error": "Failed to format read receipt",
+                    "detail": e,
+                    "res": delta,
+                    "type": "parse_error",
+                }
+            )
+
+        if ctx["options"]["self_listen"] is not True:
+            if fmt_msg["reader"] == ctx["user_id"]:
+                return None
+
+        return fmt_msg
+    elif delta["class"] == "AdminTextMessage":
+        if (
+            delta["type"] == "change_thread_theme"
+            or delta["type"] == "change_thread_nickname"
+            or delta["type"] == "change_thread_admins"
+            or delta["type"] == "change_thread_approval_mode"
+            or delta["type"] == "group_poll"
+            or delta["type"] == "messenger_call_log"
+            or delta["type"] == "participant_joined_group_call"
+        ):
+            fmt_msg = None
+            try:
+                fmt_msg = format_delta_event(delta)
+            except e:
+                raise Exception(
+                    {
+                        "error": "Failed to format admin message",
+                        "detail": e,
+                        "res": delta,
+                        "type": "parse_error",
+                    }
+                )
+
+            if ctx["options"]["self_listen"] is not True:
+                if fmt_msg.get("author") == ctx["user_id"]:
+                    return None
+
+            return fmt_msg
+        else:
+            return None
+    elif (
+        delta["class"] == "ThreadName"
+        or delta["class"] == "ParticipantsAddedToGroupThread"
+        or delta["class"] == "ParticipantLeftGroupThread"
+    ):
+        fmt_msg = None
+        try:
+            fmt_msg = format_delta_event(delta)
+        except e:
+            raise Exception(
+                {
+                    "error": "Failed to format admin message",
+                    "detail": e,
+                    "res": delta,
+                    "type": "parse_error",
+                }
+            )
+
+        if ctx["options"]["self_listen"] is not True:
+            if fmt_msg.get("author") == ctx["user_id"]:
+                return None
+
+        return fmt_msg
+    elif delta["class"] == "ForcedFetch":
+        if delta.get("threadKey") is None:
+            return None
+
+        mid = delta.get("messageId")
+        tid = delta["threadKey"].get("threadFbId")
+
+        if mid and tid:
+            form = {
+                "av": None,
+                "queries": json.dumps(
+                    {
+                        "o0": {
+                            # This doc_id is valid as of March 25, 2020
+                            "doc_id": "2848441488556444",
+                            "query_params": {
+                                "thread_and_message_id": {
+                                    "thread_id": str(tid),
+                                    "message_id": mid,
+                                },
+                            },
+                        }
+                    }
+                ),
+            }
+
+            res = default_funcs.post_with_defaults("https://www.facebook.com/api/graphqlbatch/", form=form)
+            res_data = parse_and_check_login(res, ctx, default_funcs)
+
+            if res_data[len(res_data) - 1].get("error_results") > 0:
+                raise res_data[0].o0.errors
+            
+            if res_data[len(res_data) - 1].get("successful_results") == 0:
+                raise Exception(
+                    {
+                        "error": "forcedFetch: there was no successful_results",
+                        "res": res_data,
+                    }
+                )
+            
+            fetch_data = res_data[0]["o0"]["data"]["message"]
+
+            if type(fetch_data) != dict:
+                raise Exception(f"forcedFetch: fetch_data is not a dict: {fetch_data}")
+            else:
+                __typename = fetch_data.get("__typename")
+                if __typename == "ThreadImageMessage":
+                    if ctx["options"]["self_listen"] is not True:
+                        if fetch_data["message_sender"]["id"] == ctx["user_id"]:
+                            return None
+                        
+                    has_metadata = "image_with_metadata" in fetch_data
+                        
+                    return {
+                        "type": "event",
+                        "thread_id": format_id(str(tid)),
+                        "log_message_type": "log:thread-image",
+                        "log_message_data": {
+                            "image": {
+                                "attachment_id":fetch_data["image_with_metadata"]["legacy_attachment_id"] if has_metadata else None,
+                                "width": fetch_data["image_with_metadata"]["original_dimensions"]["x"] if has_metadata else None,
+                                "height": fetch_data["image_with_metadata"]["original_dimensions"]["y"] if has_metadata else None,
+                                "url": fetch_data["image_with_metadata"]["preview"]["uri"] if has_metadata else None,
+                            }
+                        },
+                        "log_message_body": fetch_data.get("snippet"),
+                        "timestamp": fetch_data.get("timestamp_precise"),
+                        "author": fetch_data["message_sender"].get("id"),
+                    }
+                elif __typename == "UserMessage":
+                    return {
+                        "type": "message",
+                        "sender_id": fetch_data["message_sender"]["id"],
+                        "body": fetch_data["message"].get("text") or "",
+                        "thread_id": format_id(str(tid)),
+                        "message_id": fetch_data["message_id"],
+                        "attachments": [
+                            {
+                                "type": "share",
+                                "id": fetch_data["extensible_attachment"].get("legacy_attachment_id"),
+                                "url": fetch_data["extensible_attachment"]["story_attachment"].get("url"),
+                                "title": fetch_data["extensible_attachment"]["story_attachment"].get("title_with_entities").get("text"),
+                                "description": fetch_data["extensible_attachment"]["story_attachment"]["description"].get("text"),
+                                "source": fetch_data["extensible_attachment"]["story_attachment"].get("source"),
+                                "image": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("uri"),
+                                "width": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("width"),
+                                "height": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("height"),
+                                "playable": (fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("playable_duration_in_ms") or 0,
+                                "subattachments": fetch_data["extensible_attachment"].get("subattachments"),
+                                "properties": fetch_data["extensible_attachment"]["story_attachment"].get("properties"),
+                            }
+                        ],
+                        "mentions": {},
+                        "timestamp": int(fetch_data["timestamp_precise"]),
+                        "is_group": fetch_data["message_sender"]["id"] != str(tid),
+                    }
+            
 
     pass
 
@@ -329,6 +544,7 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         session_id = random.randint(1, 9007199254740991)
         user = {
+            "a": ctx["options"]["user_agent"],
             "u": ctx["user_id"],
             "s": session_id,
             "chat_on": chat_on,
@@ -336,11 +552,11 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             "d": get_guid(),
             "ct": "websocket",
             # App id from facebook
-            "aid": 5094267961737215,
+            "aid": "219994525426954",
             "mqtt_sid": "",
             "cp": 3,
             "ecp": 10,
-            "st": topics,
+            "st": [],
             "pm": [],
             "dc": "",
             "no_auto_fg": True,
@@ -350,11 +566,13 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         host = ""
         if ctx["mqtt_endpoint"]:
-            host = f"{ctx['mqtt_endpoint']}&sid={session_id}"
+            host = f"{ctx['mqtt_endpoint']}&sid={session_id}&cid={get_guid()}"
         elif ctx["region"]:
-            host = f"wss://edge-chat.facebook.com/chat?region={ctx['region'].lower()}&sid={session_id}"
+            host = f"wss://edge-chat.facebook.com/chat?region={ctx['region'].lower()}&sid={session_id}&cid={get_guid()}"
         else:
-            host = f"wss://edge-chat.facebook.com/chat?sid={session_id}"
+            host = (
+                f"wss://edge-chat.facebook.com/chat?sid={session_id}&cid={get_guid()}"
+            )
 
         cookie_str = ""
 
@@ -379,6 +597,19 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         def on_connect(client: mqtt.Client, userdata, flags, rc):
             print("Connected with result code " + str(rc))
+
+            for topic in topics:
+                client.subscribe(topic, qos=1)
+
+            client.publish(
+                topic="/ls_app_settings",
+                payload=json.dumps(
+                    {"ls_fdid": "", "ls_sv": "6928813347213944"},
+                    separators=(",", ":"),
+                ),
+                qos=1,
+                retain=False,
+            )
 
             topic = None
 
@@ -406,10 +637,6 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                 retain=False,
             )
 
-            def dcn_timeout():
-                client.disconnect()
-                get_seq_id()
-
         def parse_mqtt_payload(payload: bytes | bytearray) -> dict:
             payload_str = payload.decode("utf-8")
 
@@ -419,9 +646,8 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                 return {"t": payload_str}
 
         def on_message(client, userdata, msg: mqtt.MQTTMessage):
+            parsed = parse_mqtt_payload(msg.payload)
             if msg.topic == "/t_ms":
-                parsed = parse_mqtt_payload(msg.payload)
-
                 if "firstDeltaSeqId" in parsed and "syncToken" in parsed:
                     ctx["last_seq_id"] = parsed["firstDeltaSeqId"]
                     ctx["sync_token"] = parsed["syncToken"]
@@ -437,19 +663,35 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                         if parsed_delta is not None:
                             ctx["callback"](parsed_delta, ctx["api"])
 
+            elif msg.topic == "/thread_typing" or msg.topic == "/orca_typing_notifications":
+                ctx["callback"]({
+                    "type": "typ",
+                    "isTyping": bool(parsed["state"]),
+                    "from": str(parsed["sender_fbid"]),
+                    "thread_id": format_id(str(parsed.get("thread") or parsed.get("sender_fbid"))),
+                }, ctx["api"])
+            elif msg.topic == "/orca_presence":
+                if not ctx["options"]["update_presence"]:
+                    for data in parsed["list"]:
+                        ctx["callback"]({
+                            "type": "presence",
+                            "user_id": str(data["u"]),
+                            "timestamp": int(data["l"]) * 1000,
+                            "status": data["p"],
+                        }, ctx["api"])
+
             elif msg.topic == "/ls_resp":
+                print("Received message from topic " + msg.topic)
                 parsed = parse_mqtt_payload(msg.payload)
 
                 print(parsed)
+                pass
+            else:
+                print("Received message from topic " + msg.topic)
+                pass
 
         def on_disconnect(client, userdata, rc):
             print("Disconnected with result code " + str(rc))
-
-        def on_subscribe(client, userdata, mid, granted_qos):
-            print("Subscribed: " + str(mid) + " " + str(granted_qos))
-
-        def on_unsubscribe(client, userdata, mid):
-            print("Unsubscribed: " + str(mid))
 
         c_mqtt = mqtt.Client(
             client_id=options["client_id"],
@@ -466,8 +708,6 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
         c_mqtt.on_connect = on_connect
         c_mqtt.on_message = on_message
         c_mqtt.on_disconnect = on_disconnect
-        c_mqtt.on_subscribe = on_subscribe
-        c_mqtt.on_unsubscribe = on_unsubscribe
 
         c_mqtt.username_pw_set(username=options["username"])
 

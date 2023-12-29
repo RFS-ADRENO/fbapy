@@ -182,7 +182,7 @@ def get_signature_id():
 
 def parse_and_check_login(
     res: Response, ctx: dict, default_funcs: DefaultFuncs, retry_count: int = 0
-):
+) -> list | dict:
     if res.status_code >= 500 and res.status_code <= 600:
         if retry_count >= 5:
             raise Exception({
@@ -388,10 +388,7 @@ def format_delta_message(delta: dict):
 
 
 def format_id(id: str):
-    if id is not None:
-        return re.sub(r"(fb)?id[:.]", "", id)
-    else:
-        return id
+    return id if id is None else re.sub(r"(fb)?id[:.]", "", id)
 
 
 def _format_attachment(
@@ -418,14 +415,8 @@ def _format_attachment(
     elif _type is None and "extensible_attachment" in attachment_one:
         if (
             "story_attachment" in attachment_one["extensible_attachment"]
-            and "target" in attachment_one["extensible_attachment"]["story_attachment"]
-            and attachment_one["extensible_attachment"]["story_attachment"]["target"] is not None
-            and "__typename"
-            in attachment_one["extensible_attachment"]["story_attachment"]["target"]
-            and attachment_one["extensible_attachment"]["story_attachment"]["target"][
-                "__typename"
-            ]
-            == "MessageLocation"
+            and attachment_one["extensible_attachment"]["story_attachment"].get("target") is not None
+            and attachment_one["extensible_attachment"]["story_attachment"]["target"].get("__typename") == "MessageLocation"
         ):
             _type = "MessageLocation"
         else:
@@ -612,9 +603,7 @@ def _format_attachment(
             "type": "sticker",
             "id": str(blob["id"]),
             "url": blob["url"],
-            "pack_id": blob["pack"]["id"]
-            if "pack" in blob and blob["pack"] is not None
-            else None,
+            "pack_id": (blob.get("pack") or {}).get("id"),
             "sprite_url": blob["sprite_image"],
             "sprite_url_2x": blob["sprite_image_2x"],
             "width": blob["width"],
@@ -674,33 +663,25 @@ def _format_attachment(
 
         for cur in blob["story_attachment"]["properties"]:
             properties[cur["key"]] = cur["value"]["text"]
-
-        media_exists = (
-            "media" in blob["story_attachment"]
-            and blob["story_attachment"]["media"] is not None
-        )
-        image_exists = media_exists and "image" in blob["story_attachment"]["media"]
-
+            
         story_attm = blob["story_attachment"]
-        media = blob["story_attachment"]["media"] if media_exists else None
+        media = blob["story_attachment"].get("media") or {}
+
+        media_image = media.get("image") or {}
 
         return {
             "type": "share",
             "id": blob["legacy_attachment_id"],
             "url": story_attm.get("url"),
             "title": story_attm["title_with_entities"].get("text"),
-            "description": story_attm["description"].get("text")
-            if "description" in story_attm
-            else None,
-            "source": story_attm["source"].get("text")
-            if "source" in story_attm and story_attm["source"] is not None
-            else None,
-            "image": media["image"].get("uri") if image_exists else None,
-            "width": media["image"].get("width") if image_exists else None,
-            "height": media["image"].get("height") if image_exists else None,
-            "playable": media.get("is_playable") if media_exists else None,
-            "duration": media.get("playable_duration_in_ms") if media_exists else None,
-            "playable_url": media.get("playable_url") if media_exists else None,
+            "description": (story_attm.get("description") or {}).get("text"),
+            "soure": (story_attm.get("source") or {}).get("text"),
+            "image": media_image.get("uri"),
+            "width": media_image.get("width"),
+            "height": media_image.get("height"),
+            "playable": media.get("is_playable"),
+            "duration": media.get("playable_duration_in_ms"),
+            "playable_url": media.get("playable_url"),
             "subattachments": story_attm.get("subattachments"),
             "properties": properties,
             "facebook_url": story_attm.get("url"),
@@ -770,3 +751,65 @@ def decode_client_payload(payload):
         return out
 
     return json.loads(utf8_array_to_str(payload))
+
+
+def format_delta_read_receipt(delta: dict):
+    return {
+        "reader": str(delta["threadKey"].get("otherUserFbId") or delta.get("actorFbId")),
+        "time": delta["actionTimestampMs"],
+        "threadID": format_id(
+            str(delta["threadKey"].get("otherUserFbId") or delta["threadKey"].get("threadFbId"))
+        ),
+        "type": "read_receipt"
+    }
+
+def get_admin_text_message_type(type: str):
+    if type == "change_thread_theme":
+        return "log:thread-color"
+    elif type == "change_thread_quick_reaction": # deprecated ?
+        return "log:thread-icon"
+    elif type == "change_thread_nickname":
+        return "log:user-nickname"
+    elif type == "change_thread_admins":
+        return "log:thread-admins"
+    elif type == "group_poll":
+        return "log:thread-poll"
+    elif type == "change_thread_approval_mode":
+        return "log:thread-approval-mode"
+    elif type == "messenger_call_log" or type == "participant_joined_group_call":
+        return "log:thread-call"
+    else:
+        return type
+
+
+def format_delta_event(delta: dict):
+    log_message_type = None
+    log_message_data = None
+
+    if delta["class"] == "AdminTextMessage":
+        log_message_type = get_admin_text_message_type(delta["type"])
+        log_message_data = delta.get("untypedData")
+    elif delta["class"] == "ThreadName":
+        log_message_type = "log:thread-name"
+        log_message_data = {"name": delta.get("name")}
+    elif delta["class"] == "ParticipantsAddedToGroupThread":
+        log_message_type = "log:subscribe"
+        log_message_data = {"addedParticipants": delta.get("addedParticipants")}
+    elif delta["class"] == "ParticipantLeftGroupThread":
+        log_message_type = "log:unsubscribe"
+        log_message_data = {"leftParticipantFbId": delta.get("leftParticipantFbId")}
+
+    return {
+        "type": "event",
+        "thread_id": format_id(
+            str(
+                delta["messageMetadata"]["threadKey"].get("threadFbId")
+                or delta["messageMetadata"]["threadKey"].get("otherUserFbId")
+            )
+        ),
+        "logMessageType": log_message_type,
+        "logMessageData": log_message_data,
+        "logMessageBody": delta["messageMetadata"].get("adminText"),
+        "author": delta["messageMetadata"].get("actorFbId"),
+        "participantIDs": delta.get("participants") or [],
+    }

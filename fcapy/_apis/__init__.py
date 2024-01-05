@@ -12,3 +12,4 @@ from ._set_pfp import set_pfp
 from ._send_message_mqtt import send_message_mqtt
 from ._remove_user_from_group import remove_user_from_group
 from ._add_user_to_group import add_user_to_group
+from ._change_bio import change_bio

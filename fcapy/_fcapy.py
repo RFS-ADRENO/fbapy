@@ -171,6 +171,9 @@ class Client:
             "region": self.mqtt["region"],
             "first_listen": True,
             "options": self.options,
+            "ws_task_number": 0,
+            "ws_req_number": 0,
+            "req_callbacks": {},
         }
 
         default_funcs = DefaultFuncs(self.session, html, self.user_id, ctx)

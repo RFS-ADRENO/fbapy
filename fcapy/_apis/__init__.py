@@ -10,6 +10,8 @@ from ._create_new_group import create_new_group
 from ._share_story import share_story
 from ._set_pfp import set_pfp
 from ._send_message_mqtt import send_message_mqtt
+from ._send_sticker import send_sticker
+from ._edit_message import edit_message
 from ._remove_user_from_group import remove_user_from_group
 from ._add_user_to_group import add_user_to_group
 from ._change_bio import change_bio

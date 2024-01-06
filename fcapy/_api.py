@@ -17,6 +17,8 @@ class API:
         self.share_story  = share_story(default_funcs, ctx)
         self.set_pfp = set_pfp(default_funcs, ctx)
         self.send_message_mqtt = send_message_mqtt(default_funcs, ctx)
+        self.send_sticker = send_sticker(default_funcs, ctx)
+        self.edit_message = edit_message(default_funcs, ctx)
         self.remove_user_from_group = remove_user_from_group(default_funcs, ctx)
         self.add_user_to_group = add_user_to_group(default_funcs, ctx)
         self.change_bio = change_bio(default_funcs, ctx)

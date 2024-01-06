@@ -7,7 +7,9 @@ from .._utils import (
     _format_attachment,
     format_delta_read_receipt,
     format_delta_event,
-    format_id
+    format_id,
+    get_mid_and_tid_from_resp_payload,
+    get_error_message_from_resp_payload,
 )
 from requests import Response
 import json
@@ -16,6 +18,7 @@ import paho.mqtt.client as mqtt
 from urllib.parse import urlparse
 from typing import Callable
 import re
+import inspect
 
 
 def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
@@ -313,15 +316,20 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         "thread_id": str(
                             delta["deltaUpdatePinnedMessagesV2"]["threadKey"].get(
                                 "threadFbId"
-                            ) or delta["deltaUpdatePinnedMessagesV2"]["threadKey"].get(
+                            )
+                            or delta["deltaUpdatePinnedMessagesV2"]["threadKey"].get(
                                 "otherUserFbId"
                             )
                         ),
                         "log_message_type": "log:thread-pinned-message",
                         "log_message_data": {
-                            "newPinnedMessages": delta["deltaUpdatePinnedMessagesV2"]["newPinnedMessages"],
-                            "removedPinnedMessages": delta["deltaUpdatePinnedMessagesV2"]["removedPinnedMessages"],
-                        }
+                            "newPinnedMessages": delta["deltaUpdatePinnedMessagesV2"][
+                                "newPinnedMessages"
+                            ],
+                            "removedPinnedMessages": delta[
+                                "deltaUpdatePinnedMessagesV2"
+                            ]["removedPinnedMessages"],
+                        },
                     }
 
     # This is because the loop in the ClientPayload changes the delta, will refactor later.
@@ -431,12 +439,14 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                 ),
             }
 
-            res = default_funcs.post_with_defaults("https://www.facebook.com/api/graphqlbatch/", form=form)
+            res = default_funcs.post_with_defaults(
+                "https://www.facebook.com/api/graphqlbatch/", form=form
+            )
             res_data = parse_and_check_login(res, ctx, default_funcs)
 
             if res_data[len(res_data) - 1].get("error_results") > 0:
                 raise res_data[0].o0.errors
-            
+
             if res_data[len(res_data) - 1].get("successful_results") == 0:
                 raise Exception(
                     {
@@ -444,7 +454,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         "res": res_data,
                     }
                 )
-            
+
             fetch_data = res_data[0]["o0"]["data"]["message"]
 
             if type(fetch_data) != dict:
@@ -455,19 +465,35 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                     if ctx["options"]["self_listen"] is not True:
                         if fetch_data["message_sender"]["id"] == ctx["user_id"]:
                             return None
-                        
+
                     has_metadata = "image_with_metadata" in fetch_data
-                        
+
                     return {
                         "type": "event",
                         "thread_id": format_id(str(tid)),
                         "log_message_type": "log:thread-image",
                         "log_message_data": {
                             "image": {
-                                "attachment_id":fetch_data["image_with_metadata"]["legacy_attachment_id"] if has_metadata else None,
-                                "width": fetch_data["image_with_metadata"]["original_dimensions"]["x"] if has_metadata else None,
-                                "height": fetch_data["image_with_metadata"]["original_dimensions"]["y"] if has_metadata else None,
-                                "url": fetch_data["image_with_metadata"]["preview"]["uri"] if has_metadata else None,
+                                "attachment_id": fetch_data["image_with_metadata"][
+                                    "legacy_attachment_id"
+                                ]
+                                if has_metadata
+                                else None,
+                                "width": fetch_data["image_with_metadata"][
+                                    "original_dimensions"
+                                ]["x"]
+                                if has_metadata
+                                else None,
+                                "height": fetch_data["image_with_metadata"][
+                                    "original_dimensions"
+                                ]["y"]
+                                if has_metadata
+                                else None,
+                                "url": fetch_data["image_with_metadata"]["preview"][
+                                    "uri"
+                                ]
+                                if has_metadata
+                                else None,
                             }
                         },
                         "log_message_body": fetch_data.get("snippet"),
@@ -484,24 +510,69 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         "attachments": [
                             {
                                 "type": "share",
-                                "id": fetch_data["extensible_attachment"].get("legacy_attachment_id"),
-                                "url": fetch_data["extensible_attachment"]["story_attachment"].get("url"),
-                                "title": fetch_data["extensible_attachment"]["story_attachment"].get("title_with_entities").get("text"),
-                                "description": fetch_data["extensible_attachment"]["story_attachment"]["description"].get("text"),
-                                "source": fetch_data["extensible_attachment"]["story_attachment"].get("source"),
-                                "image": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("uri"),
-                                "width": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("width"),
-                                "height": ((fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("image") or {}).get("height"),
-                                "playable": (fetch_data["extensible_attachment"]["story_attachment"].get("media") or {}).get("playable_duration_in_ms") or 0,
-                                "subattachments": fetch_data["extensible_attachment"].get("subattachments"),
-                                "properties": fetch_data["extensible_attachment"]["story_attachment"].get("properties"),
+                                "id": fetch_data["extensible_attachment"].get(
+                                    "legacy_attachment_id"
+                                ),
+                                "url": fetch_data["extensible_attachment"][
+                                    "story_attachment"
+                                ].get("url"),
+                                "title": fetch_data["extensible_attachment"][
+                                    "story_attachment"
+                                ]
+                                .get("title_with_entities")
+                                .get("text"),
+                                "description": fetch_data["extensible_attachment"][
+                                    "story_attachment"
+                                ]["description"].get("text"),
+                                "source": fetch_data["extensible_attachment"][
+                                    "story_attachment"
+                                ].get("source"),
+                                "image": (
+                                    (
+                                        fetch_data["extensible_attachment"][
+                                            "story_attachment"
+                                        ].get("media")
+                                        or {}
+                                    ).get("image")
+                                    or {}
+                                ).get("uri"),
+                                "width": (
+                                    (
+                                        fetch_data["extensible_attachment"][
+                                            "story_attachment"
+                                        ].get("media")
+                                        or {}
+                                    ).get("image")
+                                    or {}
+                                ).get("width"),
+                                "height": (
+                                    (
+                                        fetch_data["extensible_attachment"][
+                                            "story_attachment"
+                                        ].get("media")
+                                        or {}
+                                    ).get("image")
+                                    or {}
+                                ).get("height"),
+                                "playable": (
+                                    fetch_data["extensible_attachment"][
+                                        "story_attachment"
+                                    ].get("media")
+                                    or {}
+                                ).get("playable_duration_in_ms")
+                                or 0,
+                                "subattachments": fetch_data[
+                                    "extensible_attachment"
+                                ].get("subattachments"),
+                                "properties": fetch_data["extensible_attachment"][
+                                    "story_attachment"
+                                ].get("properties"),
                             }
                         ],
                         "mentions": {},
                         "timestamp": int(fetch_data["timestamp_precise"]),
                         "is_group": fetch_data["message_sender"]["id"] != str(tid),
                     }
-            
 
     pass
 
@@ -663,29 +734,75 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
                         if parsed_delta is not None:
                             ctx["callback"](parsed_delta, ctx["api"])
 
-            elif msg.topic == "/thread_typing" or msg.topic == "/orca_typing_notifications":
-                ctx["callback"]({
-                    "type": "typ",
-                    "isTyping": bool(parsed["state"]),
-                    "from": str(parsed["sender_fbid"]),
-                    "thread_id": format_id(str(parsed.get("thread") or parsed.get("sender_fbid"))),
-                }, ctx["api"])
+            elif (
+                msg.topic == "/thread_typing"
+                or msg.topic == "/orca_typing_notifications"
+            ):
+                ctx["callback"](
+                    {
+                        "type": "typ",
+                        "isTyping": bool(parsed["state"]),
+                        "from": str(parsed["sender_fbid"]),
+                        "thread_id": format_id(
+                            str(parsed.get("thread") or parsed.get("sender_fbid"))
+                        ),
+                    },
+                    ctx["api"],
+                )
             elif msg.topic == "/orca_presence":
                 if not ctx["options"]["update_presence"]:
                     for data in parsed["list"]:
-                        ctx["callback"]({
-                            "type": "presence",
-                            "user_id": str(data["u"]),
-                            "timestamp": int(data["l"]) * 1000,
-                            "status": data["p"],
-                        }, ctx["api"])
+                        ctx["callback"](
+                            {
+                                "type": "presence",
+                                "user_id": str(data["u"]),
+                                "timestamp": int(data["l"]) * 1000,
+                                "status": data["p"],
+                            },
+                            ctx["api"],
+                        )
 
             elif msg.topic == "/ls_resp":
                 print("Received message from topic " + msg.topic)
                 parsed = parse_mqtt_payload(msg.payload)
 
-                print(parsed)
-                pass
+                if "payload" in parsed:
+                    payload = json.loads(parsed["payload"])
+                    mid_tid = get_mid_and_tid_from_resp_payload(payload)
+
+                    req_cb = ctx["req_callbacks"].get(parsed["request_id"])
+
+                    if req_cb is not None:
+                        params = inspect.signature(req_cb).parameters
+                        if mid_tid is not None:
+                            if len(params) == 2:
+                                req_cb(
+                                    {
+                                        "message_id": mid_tid.get("mid"),
+                                        "thread_id": mid_tid.get("tid")
+                                    },
+                                    None
+                                )
+                            elif len(params) == 1:
+                                req_cb({
+                                    "message_id": mid_tid.get("mid"),
+                                    "thread_id": mid_tid.get("tid")
+                                })
+                            elif len(params) == 0:
+                                req_cb()
+                        else:
+                            error_msg = get_error_message_from_resp_payload(payload)
+                            if len(params) == 2:
+                                req_cb(None, error_msg)
+                            elif len(params) == 1:
+                                req_cb(None)
+                            elif len(params) == 0:
+                                req_cb()
+
+                        del ctx["req_callbacks"][parsed["request_id"]]
+                else:
+                    print("No payload in response: " + json.dumps(parsed, indent=4))
+
             else:
                 print("Received message from topic " + msg.topic)
                 pass

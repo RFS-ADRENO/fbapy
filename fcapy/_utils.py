@@ -7,6 +7,7 @@ from requests import Session, Response
 import re
 from typing import Dict
 from urllib.parse import urlparse, parse_qs
+import inspect
 
 
 def base64_decode(data: str) -> list:
@@ -813,3 +814,36 @@ def format_delta_event(delta: dict):
         "author": delta["messageMetadata"].get("actorFbId"),
         "participantIDs": delta.get("participants") or [],
     }
+
+def is_edit_message_resp(payload: dict):
+    try:
+        return payload["step"][1][2][2][1][1] == "editMessage"
+    except:
+        return False
+
+def get_mid_and_tid_from_resp_payload(payload: dict):
+    try:
+        if is_edit_message_resp(payload):
+            return {
+                "mid": payload["step"][1][2][2][1][2],
+                "tid": None
+            }
+        return {
+            "mid": payload["step"][1][2][2][1][3],
+            "tid": payload["step"][4][2][2][1][2][1]
+        }
+    except:
+        return None
+    
+def get_error_message_from_resp_payload(payload: dict):
+    try:
+        return payload["step"][3][2][2][1][1]
+    except:
+        return "Unknown error"
+
+def is_callable(func: callable) -> bool:
+    try:
+        inspect.signature(func)
+        return True
+    except:
+        return False

@@ -1,30 +1,84 @@
 from .._utils import (
     DefaultFuncs,
     generate_offline_threading_id,
-    generate_timestamp_relative,
-    generate_threading_id,
-    get_signature_id,
+    is_callable,
     parse_and_check_login,
 )
 import time
+import json
+from paho.mqtt.client import Client
 from requests import Response
 from io import BufferedReader
-import concurrent.futures
+from typing import Callable
 from magic import Magic
+import concurrent.futures
 
-allowed_keys = [
-    "attachment",
-    "url",
-    "sticker",
-    "emoji",
-    "emojiSize",
-    "body",
-    "mentions",
-    "location",
-]
+# @TODO: Add support for sending URL
+def get_valid_mentions(text: str, mention: dict | list[dict]) -> list:
+    if not isinstance(mention, dict) and not isinstance(mention, list):
+        raise ValueError("Mentions must be a dict or list of dict")
+
+    mentions = mention if isinstance(mention, list) else [mention]
+
+    valid_mentions = []
+    current_offset = 0
+    for mention in mentions:
+        if "id" in mention and "tag" in mention:
+            provided_offset = mention.get("offset")
+            tag_len = 0
+
+            if type(provided_offset) is int:
+                if provided_offset >= len(text):
+                    break
+
+                is_length_exceed = provided_offset + len(mention["tag"]) > len(text)
+                tag_len = (
+                    len(mention["tag"])
+                    if not is_length_exceed
+                    else len(text) - provided_offset
+                )
+                current_offset = provided_offset
+            else:
+                if current_offset >= len(text):
+                    break
+
+                find = text.find(mention["tag"], current_offset)
+                if find != -1:
+                    is_length_exceed = find + len(mention["tag"]) > len(text)
+                    tag_len = (
+                        len(mention["tag"])
+                        if not is_length_exceed
+                        else len(text) - find
+                    )
+
+                    current_offset = find
+
+            valid_mentions.append(
+                {
+                    "i": mention["id"],
+                    "o": current_offset,
+                    "l": tag_len,
+                }
+            )
+
+            current_offset += tag_len
+
+    return valid_mentions
 
 
 def send_message(default_funcs: DefaultFuncs, ctx: dict):
+    def make_send_task(task_payload: dict, thread_id: int):
+        ctx["ws_task_number"] += 1
+        task = {
+            "failure_count": None,
+            "label": "46",
+            "payload": json.dumps(task_payload, separators=(",", ":")),
+            "queue_name": str(thread_id),
+            "task_id": ctx["ws_task_number"],
+        }
+
+        return task
+
     def is_acceptable_attachment(attachment):
         return isinstance(attachment, BufferedReader) or (
             type(attachment) is tuple
@@ -36,10 +90,10 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
 
     def upload(form_data: dict):
         res: Response = default_funcs.post_form_data_with_default(
-            "https://upload.facebook.com/ajax/mercury/upload.php",
+            "https://www.facebook.com/ajax/mercury/upload.php",
             form_data["form"],
             files={
-                "upload_1024": form_data["attachment"]["upload_1024"],
+                "farr": form_data["attachment"]["farr"],
             },
         )
 
@@ -48,7 +102,8 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
         if "error" in res_data:
             raise res_data
 
-        return res_data["payload"]["metadata"][0]
+        metadata = res_data["payload"]["metadata"]
+        return isinstance(metadata, list) and metadata[0] or metadata.get("0")
 
     def upload_attachment(attachments: list):
         forms = []
@@ -63,7 +118,7 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
 
             form_data = {
                 "form": {"voice_clip": "true"},
-                "attachment": {"upload_1024": None},
+                "attachment": {"farr": None},
             }
 
             if isinstance(attachment, BufferedReader):
@@ -72,13 +127,13 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
 
                 attachment.seek(0)
 
-                form_data["attachment"]["upload_1024"] = (
+                form_data["attachment"]["farr"] = (
                     "file",
                     attachment,
                     mimetype,
                 )
             else:
-                form_data["attachment"]["upload_1024"] = attachment
+                form_data["attachment"]["farr"] = attachment
 
             forms.append(form_data)
 
@@ -87,142 +142,159 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
 
         return results
 
-    def handle_location(msg: dict, form: dict):
-        if "location" in msg and type(msg["location"]) is dict:
-            latitude = msg["location"].get("latitude")
-            longitude = msg["location"].get("longitude")
+    def handle_attachment(attachments: list) -> dict:
+        uploaded_attachments = upload_attachment(attachments)
 
-            if latitude is not None and longitude is not None:
-                form["location_attachment[coordinates][latitude]"] = latitude
-                form["location_attachment[coordinates][longitude]"] = longitude
-                form["location_attachment[is_current_location]"] = bool(
-                    msg["location"].get("current")
-                )
+        attachments_ids = {
+            "image_ids": [],
+            "other_ids": [],
+        }
+        for file in uploaded_attachments:
+            if file["filetype"] == "image/gif":
+                attachments_ids["other_ids"].append(file["gif_id"])
+            elif file["filetype"].startswith("image"):
+                attachments_ids["image_ids"].append(file["fbid"])
             else:
-                raise ValueError(
-                    "Location must have latitude and longitude, not "
-                    + str(msg["location"])
-                )
+                got_id = file.get("fbid") or file.get("gif_id") or file.get("audio_id") or file.get("video_id") or file.get("file_id")
+                if got_id is not None:
+                    attachments_ids["other_ids"].append(got_id)
+                else:
+                    print(f"Unknown file type: {json.dumps(file, indent=4)}")
 
-    def handle_sticker(msg: dict, form: dict):
-        if "sticker" in msg:
-            form["sticker_id"] = msg["sticker"]
-
-    def handle_attachment(msg: dict, form: dict):
-        if "attachment" in msg:
-            form["image_ids"] = []
-            form["gif_ids"] = []
-            form["file_ids"] = []
-            form["video_ids"] = []
-            form["audio_ids"] = []
-
-            if type(msg["attachment"]) is not list:
-                msg["attachment"] = [msg["attachment"]]
-
-            files = upload_attachment(msg["attachment"])
-
-            for file in files:
-                if "image_id" in file:
-                    form["image_ids"].append(file["image_id"])
-                elif "gif_id" in file:
-                    form["gif_ids"].append(file["gif_id"])
-                elif "file_id" in file:
-                    form["file_ids"].append(file["file_id"])
-                elif "video_id" in file:
-                    form["video_ids"].append(file["video_id"])
-                elif "audio_id" in file:
-                    form["audio_ids"].append(file["audio_id"])
-
-    def handle_url(msg: dict, form: dict):
-        pass
-
-    def handle_emoji(msg: dict, form: dict):
-        pass
-
-    def handle_mention(msg: dict, form: dict):
-        pass
-
-    def send_content(form: dict, thread_id: str, is_group: bool):
-        if is_group:
-            form["thread_fbid"] = thread_id
-        else:
-            form["specific_to_list[0]"] = "fbid:" + thread_id
-            form["specific_to_list[1]"] = "fbid:" + ctx["user_id"]
-            form["other_user_fbid"] = thread_id
-
-        res: Response = default_funcs.post_with_defaults(
-            "https://www.facebook.com/messaging/send/", form
-        )
-
-        return parse_and_check_login(res, ctx, default_funcs)
+        return attachments_ids
 
     def send(
-        msg: str | dict,
-        thread_id: str,
-        reply_to_message: str = None,
-        is_group: bool = None,
+        text: str,
+        mention: dict | list[dict] | None = None,
+        attachment: BufferedReader
+        | tuple[str, BufferedReader, str]
+        | list[BufferedReader | tuple[str, BufferedReader, str]]
+        | None = None,
+        thread_id: int = None,
+        callback: Callable[[dict | None, dict | None], None] = None,
     ):
-        is_group = is_group if type(is_group) is bool else len(thread_id) > 15
+        if "mqtt_client" not in ctx:
+            raise ValueError("Not connected to MQTT")
 
-        if not is_valid_msg(msg):
-            raise ValueError("Message must be string or dict, not " + str(type(msg)))
+        mqtt: Client = ctx["mqtt_client"]
 
-        if type(msg) is str:
-            msg = {"body": msg}
+        if mqtt is None:
+            raise ValueError("Not connected to MQTT")
 
-        disallowed_keys = [key for key in msg.keys() if key not in allowed_keys]
+        if thread_id is None:
+            raise ValueError("thread_id is required")
 
-        if len(disallowed_keys) > 0:
-            raise ValueError("Disallowed keys: " + str(disallowed_keys))
+        if text is None and attachment is None:
+            raise ValueError("text or attachment required")
 
-        message_and_otid = generate_offline_threading_id()
+        text = str(text) if text is not None else ""
 
-        form = {
-            "client": "mercury",
-            "action_type": "ma-type:user-generated-message",
-            "author": "fbid:" + ctx["user_id"],
-            "timestamp": int(time.time() * 1000),
-            "timestamp_absolute": "Today",
-            "timestamp_relative": generate_timestamp_relative(),
-            "timestamp_time_passed": "0",
-            "is_unread": False,
-            "is_cleared": False,
-            "is_forward": False,
-            "is_filtered_content": False,
-            "is_filtered_content_bh": False,
-            "is_filtered_content_account": False,
-            "is_filtered_content_quasar": False,
-            "is_filtered_content_invalid_app": False,
-            "is_spoof_warning": False,
-            "source": "source:chat:web",
-            "source_tags[0]": "source:chat",
-            "body": msg["body"] if "body" in msg else "",
-            "html_body": False,
-            "ui_push_phase": "V3",
-            "status": "0",
-            "offline_threading_id": message_and_otid,
-            "message_id": message_and_otid,
-            "threading_id": generate_threading_id(ctx["client_id"]),
-            "ephemeral_ttl_mode:": "0",
-            "manual_retry_cnt": "0",
-            "has_attachment": bool(
-                msg.get("attachment") or msg.get("url") or msg.get("sticker")
-            ),
-            "signatureID": get_signature_id(),
-            "replied_to_message_id": reply_to_message,
+        ctx["ws_req_number"] += 1
+
+        task_payload = {
+            "initiating_source": 0,
+            "multitab_env": 0,
+            "otid": generate_offline_threading_id(),
+            "send_type": 1,
+            "skip_url_preview_gen": 0,
+            # what is source for?
+            "source": 0,
+            "sync_group": 1,
+            "text": text,
+            "text_has_links": 0,
+            "thread_id": int(thread_id),
         }
 
-        handle_location(msg, form)
-        handle_sticker(msg, form)
-        handle_attachment(msg, form)
-        handle_url(msg, form)
-        handle_emoji(msg, form)
-        handle_mention(msg, form)
+        if mention is not None and len(text) > 0:
+            valid_mentions = get_valid_mentions(text, mention)
 
-        send_content(form, thread_id, is_group)
+            task_payload["mention_data"] = {
+                "mention_ids": ",".join([str(x["i"]) for x in valid_mentions]),
+                "mention_lengths": ",".join([str(x["l"]) for x in valid_mentions]),
+                "mention_offsets": ",".join([str(x["o"]) for x in valid_mentions]),
+                "mention_types": ",".join(["p" for _ in valid_mentions]),
+            }
+
+        task = make_send_task(task_payload, thread_id)
+
+        ctx["ws_task_number"] += 1
+        task_mark_payload = {
+            "last_read_watermark_ts": int(time.time() * 1000),
+            "sync_group": 1,
+            "thread_id": int(thread_id),
+        }
+
+        task_mark = {
+            "failure_count": None,
+            "label": "21",
+            "payload": json.dumps(task_mark_payload, separators=(",", ":")),
+            "queue_name": str(thread_id),
+            "task_id": ctx["ws_task_number"],
+        }
+
+        content = {
+            "app_id": "2220391788200892",
+            "payload": {
+                "data_trace_id": None,
+                "epoch_id": int(generate_offline_threading_id()),
+                "tasks": [],
+                "version_id": "7545284305482586",
+            },
+            "request_id": ctx["ws_req_number"],
+            "type": 3,
+        }
+
+        content["payload"]["tasks"].append(task)
+        content["payload"]["tasks"].append(task_mark)
+
+        if attachment is not None:
+            attachments = attachment if isinstance(attachment, list) else [attachment]
+            attachments_ids = handle_attachment(attachments)
+
+            image_ids = attachments_ids["image_ids"]
+            other_ids = attachments_ids["other_ids"]
+
+            if len(image_ids) > 0:
+                task_image_payload = {
+                    "attachment_fbids": image_ids,
+                    "otid": generate_offline_threading_id(),
+                    "send_type": 3,
+                    # what is source for?
+                    "source": 0,
+                    "sync_group": 1,
+                    "text": None,
+                    "thread_id": int(thread_id),
+                }
+
+                task_image = make_send_task(task_image_payload, thread_id)
+                content["payload"]["tasks"].append(task_image)
+
+            if len(other_ids) > 0:
+                for other_id in other_ids:
+                    task_other_payload = {
+                        "attachment_fbids": [other_id],
+                        "otid": generate_offline_threading_id(),
+                        "send_type": 3,
+                        # what is source for?
+                        "source": 0,
+                        "sync_group": 1,
+                        "text": None,
+                        "thread_id": int(thread_id),
+                    }
+
+                    task_other = make_send_task(task_other_payload, thread_id)
+                    content["payload"]["tasks"].append(task_other)
+
+        content["payload"] = json.dumps(content["payload"], separators=(",", ":"))
+
+        if is_callable(callback):
+            ctx["req_callbacks"][ctx["ws_req_number"]] = callback
+
+        mqtt.publish(
+            topic="/ls_req",
+            payload=json.dumps(content, separators=(",", ":")),
+            qos=1,
+            retain=False,
+        )
 
     return send
-
-
-def is_valid_msg(msg):
-    return type(msg) is dict or type(msg) is str

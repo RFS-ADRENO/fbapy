@@ -5,7 +5,7 @@ class API:
     def __init__(self, default_funcs: DefaultFuncs, ctx: dict):
         ctx["api"] = self
 
-        self.send_message = send_message(default_funcs, ctx)
+        self.send_message_http = send_message_http(default_funcs, ctx)
         self.listen_mqtt = listen_mqtt(default_funcs, ctx)
         self.resolve_photo_url = resolve_photo_url(default_funcs, ctx)
         self.change_emoji  = change_emoji(default_funcs, ctx)
@@ -16,7 +16,7 @@ class API:
         self.create_new_group  = create_new_group(default_funcs, ctx)
         self.share_story  = share_story(default_funcs, ctx)
         self.set_pfp = set_pfp(default_funcs, ctx)
-        self.send_message_mqtt = send_message_mqtt(default_funcs, ctx)
+        self.send_message = send_message(default_funcs, ctx)
         self.send_sticker = send_sticker(default_funcs, ctx)
         self.edit_message = edit_message(default_funcs, ctx)
         self.remove_user_from_group = remove_user_from_group(default_funcs, ctx)

@@ -15,3 +15,4 @@ from ._edit_message import edit_message
 from ._remove_user_from_group import remove_user_from_group
 from ._add_user_to_group import add_user_to_group
 from ._change_bio import change_bio
+from ._get_user_info import get_user_info

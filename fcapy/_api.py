@@ -22,3 +22,4 @@ class API:
         self.remove_user_from_group = remove_user_from_group(default_funcs, ctx)
         self.add_user_to_group = add_user_to_group(default_funcs, ctx)
         self.change_bio = change_bio(default_funcs, ctx)
+        self.get_user_info = get_user_info(default_funcs, ctx)

@@ -810,6 +810,9 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
         def on_disconnect(client, userdata, rc):
             print("Disconnected with result code " + str(rc))
 
+            if rc == mqtt.MQTT_ERR_CONN_REFUSED:
+                client.disconnect()
+
         c_mqtt = mqtt.Client(
             client_id=options["client_id"],
             clean_session=options["clean"],

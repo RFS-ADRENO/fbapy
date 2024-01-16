@@ -3,7 +3,7 @@ import random
 import json
 import requests
 
-# https://github.com/RFS-ADRENO/fcapy/blob/main/assets/story_text_format_presets.png
+# https://github.com/RFS-ADRENO/fbapy/blob/main/assets/story_text_format_presets.png
 # The list below follows the order of the image above (from left to right, top to bottom)
 PRESET_IDS = [
     "401372137331149",

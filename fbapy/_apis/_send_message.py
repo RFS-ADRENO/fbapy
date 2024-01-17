@@ -13,6 +13,7 @@ from typing import Callable
 from magic import Magic
 import concurrent.futures
 
+
 # @TODO: Add support for sending URL
 def get_valid_mentions(text: str, mention: dict | list[dict]) -> list:
     if not isinstance(mention, dict) and not isinstance(mention, list):
@@ -155,22 +156,40 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
             elif file["filetype"].startswith("image"):
                 attachments_ids["image_ids"].append(file["fbid"])
             else:
-                got_id = file.get("fbid") or file.get("gif_id") or file.get("audio_id") or file.get("video_id") or file.get("file_id")
+                got_id = (
+                    file.get("fbid")
+                    or file.get("gif_id")
+                    or file.get("audio_id")
+                    or file.get("video_id")
+                    or file.get("file_id")
+                )
                 if got_id is not None:
                     attachments_ids["other_ids"].append(got_id)
                 else:
                     print(f"Unknown file type: {json.dumps(file, indent=4)}")
 
         return attachments_ids
+    
+    def add_reply_metadata(task_payload: dict, message_id: str):
+        if message_id is not None:
+            if type(message_id) is not str:
+                raise ValueError("message_id must be a string")
+
+            task_payload["reply_metadata"] = {
+                "reply_source_id": message_id,
+                "reply_source_type": 1,
+                "reply_type": 0,
+            }
 
     def send(
-        text: str,
+        text: str | None = None,
         mention: dict | list[dict] | None = None,
         attachment: BufferedReader
         | tuple[str, BufferedReader, str]
         | list[BufferedReader | tuple[str, BufferedReader, str]]
         | None = None,
-        thread_id: int = None,
+        thread_id: str = None,
+        message_id: str = None,
         callback: Callable[[dict | None, dict | None], None] = None,
     ):
         if "mqtt_client" not in ctx:
@@ -187,51 +206,7 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
         if text is None and attachment is None:
             raise ValueError("text or attachment required")
 
-        text = str(text) if text is not None else ""
-
         ctx["ws_req_number"] += 1
-
-        task_payload = {
-            "initiating_source": 0,
-            "multitab_env": 0,
-            "otid": generate_offline_threading_id(),
-            "send_type": 1,
-            "skip_url_preview_gen": 0,
-            # what is source for?
-            "source": 0,
-            "sync_group": 1,
-            "text": text,
-            "text_has_links": 0,
-            "thread_id": int(thread_id),
-        }
-
-        if mention is not None and len(text) > 0:
-            valid_mentions = get_valid_mentions(text, mention)
-
-            task_payload["mention_data"] = {
-                "mention_ids": ",".join([str(x["i"]) for x in valid_mentions]),
-                "mention_lengths": ",".join([str(x["l"]) for x in valid_mentions]),
-                "mention_offsets": ",".join([str(x["o"]) for x in valid_mentions]),
-                "mention_types": ",".join(["p" for _ in valid_mentions]),
-            }
-
-        task = make_send_task(task_payload, thread_id)
-
-        ctx["ws_task_number"] += 1
-        task_mark_payload = {
-            "last_read_watermark_ts": int(time.time() * 1000),
-            "sync_group": 1,
-            "thread_id": int(thread_id),
-        }
-
-        task_mark = {
-            "failure_count": None,
-            "label": "21",
-            "payload": json.dumps(task_mark_payload, separators=(",", ":")),
-            "queue_name": str(thread_id),
-            "task_id": ctx["ws_task_number"],
-        }
-
         content = {
             "app_id": "2220391788200892",
             "payload": {
@@ -244,8 +219,53 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
             "type": 3,
         }
 
-        content["payload"]["tasks"].append(task)
-        content["payload"]["tasks"].append(task_mark)
+        text = str(text) if text is not None else ""
+        if len(text) > 0:
+            task_payload = {
+                "initiating_source": 0,
+                "multitab_env": 0,
+                "otid": generate_offline_threading_id(),
+                "send_type": 1,
+                "skip_url_preview_gen": 0,
+                # what is source for?
+                "source": 0,
+                "sync_group": 1,
+                "text": text,
+                "text_has_links": 0,
+                "thread_id": int(thread_id),
+            }
+
+            add_reply_metadata(task_payload, message_id)
+
+            if mention is not None and len(text) > 0:
+                valid_mentions = get_valid_mentions(text, mention)
+
+                task_payload["mention_data"] = {
+                    "mention_ids": ",".join([str(x["i"]) for x in valid_mentions]),
+                    "mention_lengths": ",".join([str(x["l"]) for x in valid_mentions]),
+                    "mention_offsets": ",".join([str(x["o"]) for x in valid_mentions]),
+                    "mention_types": ",".join(["p" for _ in valid_mentions]),
+                }
+
+            task = make_send_task(task_payload, thread_id)
+
+            ctx["ws_task_number"] += 1
+            task_mark_payload = {
+                "last_read_watermark_ts": int(time.time() * 1000),
+                "sync_group": 1,
+                "thread_id": int(thread_id),
+            }
+
+            task_mark = {
+                "failure_count": None,
+                "label": "21",
+                "payload": json.dumps(task_mark_payload, separators=(",", ":")),
+                "queue_name": str(thread_id),
+                "task_id": ctx["ws_task_number"],
+            }
+
+            content["payload"]["tasks"].append(task)
+            content["payload"]["tasks"].append(task_mark)
 
         if attachment is not None:
             attachments = attachment if isinstance(attachment, list) else [attachment]
@@ -266,6 +286,8 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
                     "thread_id": int(thread_id),
                 }
 
+                add_reply_metadata(task_image_payload, message_id)
+
                 task_image = make_send_task(task_image_payload, thread_id)
                 content["payload"]["tasks"].append(task_image)
 
@@ -281,6 +303,8 @@ def send_message(default_funcs: DefaultFuncs, ctx: dict):
                         "text": None,
                         "thread_id": int(thread_id),
                     }
+
+                    add_reply_metadata(task_other_payload, message_id)
 
                     task_other = make_send_task(task_other_payload, thread_id)
                     content["payload"]["tasks"].append(task_other)

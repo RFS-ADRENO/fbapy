@@ -1,15 +1,28 @@
-from .._utils import (
-    DefaultFuncs,
-    generate_offline_threading_id,
-    is_callable
-)
+from .._utils import DefaultFuncs, generate_offline_threading_id, is_callable
 import time
 import json
 from paho.mqtt.client import Client
 from typing import Callable
 
+
 def send_sticker(default_funcs: DefaultFuncs, ctx: dict):
-    def send(sticker_id: str, thread_id: int, callback: Callable[[dict | None, dict | None], None] = None):
+    def add_reply_metadata(task_payload: dict, message_id: str):
+        if message_id is not None:
+            if type(message_id) is not str:
+                raise ValueError("message_id must be a string")
+
+            task_payload["reply_metadata"] = {
+                "reply_source_id": message_id,
+                "reply_source_type": 1,
+                "reply_type": 0,
+            }
+
+    def send(
+        sticker_id: int,
+        thread_id: str,
+        message_id: str = None,
+        callback: Callable[[dict | None, dict | None], None] = None,
+    ):
         if "mqtt_client" not in ctx:
             raise ValueError("Not connected to MQTT")
 
@@ -17,6 +30,9 @@ def send_sticker(default_funcs: DefaultFuncs, ctx: dict):
 
         if mqtt is None:
             raise ValueError("Not connected to MQTT")
+
+        if thread_id is None:
+            raise ValueError("thread_id is required")
 
         ctx["ws_req_number"] += 1
 
@@ -34,7 +50,9 @@ def send_sticker(default_funcs: DefaultFuncs, ctx: dict):
             "text_has_links": 0,
             "thread_id": int(thread_id),
         }
-            
+
+        add_reply_metadata(task_payload, message_id)
+
         task = {
             "failure_count": None,
             "label": "46",
@@ -83,5 +101,5 @@ def send_sticker(default_funcs: DefaultFuncs, ctx: dict):
             qos=1,
             retain=False,
         )
-        
+
     return send

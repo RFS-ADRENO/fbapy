@@ -1,4 +1,4 @@
-from .._utils import (
+from ..._utils import (
     DefaultFuncs,
     generate_offline_threading_id,
     generate_timestamp_relative,
@@ -219,7 +219,7 @@ def send_message_http(default_funcs: DefaultFuncs, ctx: dict):
         handle_emoji(msg, form)
         handle_mention(msg, form)
 
-        send_content(form, thread_id, is_group)
+        return send_content(form, thread_id, is_group)
 
     return send
 

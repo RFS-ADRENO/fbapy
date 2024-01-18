@@ -45,7 +45,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
             and delta["attachments"][i]["mercury"].get("attach_type") == "photo"
         ):
             try:
-                res = ctx["api"].resolve_photo_url(delta["attachments"][i]["fbid"])
+                res = ctx["api"].http.resolve_photo_url(delta["attachments"][i]["fbid"])
                 delta["attachments"][i]["mercury"]["metadata"]["url"] = res
             except:
                 pass
@@ -308,6 +308,8 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         "log_message_data": {
                             "emoji": delta["deltaUpdateThreadEmoji"]["emoji"]
                         },
+                        "timestamp": None,
+                        "author": None,
                         "participant_ids": [],
                     }
                 elif "deltaUpdatePinnedMessagesV2" in delta and listen_events:
@@ -330,6 +332,9 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                                 "deltaUpdatePinnedMessagesV2"
                             ]["removedPinnedMessages"],
                         },
+                        "timestamp": None,
+                        "author": None,
+                        "participant_ids": [],
                     }
 
     # This is because the loop in the ClientPayload changes the delta, will refactor later.
@@ -499,6 +504,7 @@ def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
                         "log_message_body": fetch_data.get("snippet"),
                         "timestamp": fetch_data.get("timestamp_precise"),
                         "author": fetch_data["message_sender"].get("id"),
+                        "participant_ids": []
                     }
                 elif __typename == "UserMessage":
                     return {

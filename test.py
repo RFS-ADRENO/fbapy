@@ -1,3 +1,5 @@
+# Install python-dotenv first
+
 import os
 from os.path import join, dirname
 from dotenv import load_dotenv
@@ -10,7 +12,7 @@ load_dotenv(dotenv_path)
 client = Client()
 
 api = client.login(
-    os.environ.get("APPSTATE"),
+    appstate=os.environ.get("APPSTATE"),
     options={
         "user_agent": "Mozilla/5.0 (Linux; Android 9; SM-G973U Build/PPR1.180610.011) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Mobile Safari/537.36"
     },
@@ -29,29 +31,30 @@ def safe_cast(val, to_type, default=None):
 def callback(event, api: API):
     try:
         if event is not None:
-            if event["type"] == "message" or event["type"] == "message_reply":
-                body: str = event["body"]  # guaranteed to exist
+            if (
+                event["type"] == CONSTS.EVENTS.MESSAGE
+                or event["type"] == CONSTS.EVENTS.MESSAGE_REPLY
+            ):
+                body: str = event["body"]
                 print(f"Message: {body}")
 
                 if body.startswith(PREFIX):
                     if body == PREFIX + "ping1":
-                        api.send_message_mqtt("pong", event["thread_id"])
+                        api.http.send_message("pong", event["thread_id"])
                     elif body == PREFIX + "ping2":
                         api.send_message(
-                            "pong", event["thread_id"]
-                        )
-                    elif body == PREFIX + "hi":
-                        api.send_message(
-                            "hello", event["thread_id"], event["message_id"]
+                            text="pong",
+                            thread_id=event["thread_id"],
+                            message_id=event["message_id"],
                         )
                     elif body == PREFIX + "meow":
-                        api.send_message(
-                            {"sticker": "554423694645485"},
-                            event["thread_id"],
-                            event["message_id"],
+                        api.send_sticker(
+                            sticker_id=554423694645485,
+                            thread_id=event["thread_id"],
+                            message_id=event["message_id"],
                         )
                     elif body == PREFIX + "where":
-                        api.send_message(
+                        api.http.send_message(
                             {
                                 "location": {
                                     "latitude": 10.764461306457537,
@@ -69,27 +72,27 @@ def callback(event, api: API):
 
                         if color < 1 or color > len(CONSTS.LIST_COLORS):
                             api.send_message(
-                                f"Invalid color index. Must be in range [0, {len(CONSTS.LIST_COLORS) - 1}]\nUse `{PREFIX}colors` to see all supported colors",
-                                event["thread_id"],
-                                event["message_id"],
+                                text=f"Invalid color index. Must be in range [0, {len(CONSTS.LIST_COLORS) - 1}]\nUse `{PREFIX}colors` to see all supported colors",
+                                thread_id=event["thread_id"],
+                                message_id=event["message_id"],
                             )
                             return
 
                         if font < 1 or font > len(CONSTS.LIST_FONTS):
                             api.send_message(
-                                f"Invalid font index. Must be in range [0, {len(CONSTS.LIST_FONTS_KEYS) - 1}]\nUse `{PREFIX}fonts` to see all supported fonts",
-                                event["thread_id"],
-                                event["message_id"],
+                                text=f"Invalid font index. Must be in range [0, {len(CONSTS.LIST_FONTS_KEYS) - 1}]\nUse `{PREFIX}fonts` to see all supported fonts",
+                                thread_id=event["thread_id"],
+                                message_id=event["message_id"],
                             )
                             return
 
                         color = CONSTS.LIST_COLORS[color - 1]
                         font = CONSTS.LIST_FONTS[font - 1]
 
-                        api.share_story(story, preset_id=color, font_id=font)
+                        api.graphql.share_story(story, preset_id=color, font_id=font)
                     elif body == PREFIX + "fonts":
                         api.send_message(
-                            "All of these are supported fonts"
+                            text="All of these are supported fonts"
                             + "\n"
                             + "\n".join(
                                 [
@@ -97,11 +100,11 @@ def callback(event, api: API):
                                     for i in range(len(CONSTS.LIST_FONTS_KEYS))
                                 ]
                             ),
-                            event["thread_id"],
-                            event["message_id"],
+                            thread_id=event["thread_id"],
+                            message_id=event["message_id"],
                         )
                     elif body == PREFIX + "colors":
-                        api.send_message(
+                        api.http.send_message(
                             {
                                 "body": "All of these are supported presets",
                                 "attachment": open(
@@ -113,24 +116,21 @@ def callback(event, api: API):
                         )
                     elif body == PREFIX + "imgs":
                         api.send_message(
-                            {
-                                "body": "All of these are supported presets",
-                                "attachment": [
-                                    open("assets/story_text_format_presets.png", "rb"),
-                                    open("assets/a.jpg", "rb"),
-                                    open("assets/a.jpg", "rb"),
-                                ],
-                            },
-                            event["thread_id"],
-                            event["message_id"],
+                            text="All of these are supported presets",
+                            thread_id=event["thread_id"],
+                            message_id=event["message_id"],
+                            attachment=[
+                                open("assets/story_text_format_presets.png", "rb")
+                            ],
                         )
                     else:
                         api.send_message(
-                            "Unknown command", event["thread_id"], event["message_id"]
+                            text="Unknown command",
+                            thread_id=event["thread_id"],
+                            message_id=event["message_id"],
                         )
 
                 if "attachments" in event and len(event["attachments"]) > 0:
-                    pass
                     for attachment in event["attachments"]:
                         if (
                             "preview_url" not in attachment

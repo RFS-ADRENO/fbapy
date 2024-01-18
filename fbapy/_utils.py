@@ -811,6 +811,7 @@ def format_delta_event(delta: dict):
         "logMessageType": log_message_type,
         "logMessageData": log_message_data,
         "logMessageBody": delta["messageMetadata"].get("adminText"),
+        "timestamp": delta["messageMetadata"].get("timestamp"),
         "author": delta["messageMetadata"].get("actorFbId"),
         "participantIDs": delta.get("participants") or [],
     }

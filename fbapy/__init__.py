@@ -1,4 +1,4 @@
-__all__ = ['Client', 'API','CONSTS']
+__all__ = ['Client', 'API', 'CONSTS']
 
 from ._fbapy import Client
 from ._api import API

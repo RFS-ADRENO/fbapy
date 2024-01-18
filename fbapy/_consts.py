@@ -86,3 +86,28 @@ class CONSTS:
         "fancy",
         "headline",
     ]
+
+    class EVENTS:
+        MESSAGE = "message"
+        MESSAGE_REPLY = "message_reply"
+        MESSAGE_REACTION = "message_reaction"
+        MESSAGE_UNSEND = "message_unsend"
+        EVENT = "event"
+        TYP = "typ"
+        PRESENCE = "presence"
+        READ_RECEIPT = "read_receipt"
+
+    class LOG_MESSAGE:
+        SUBSCRIBE = "log:subscribe"
+        UNSUBSCRIBE = "log:unsubscribe"
+        THEME =  "log:thread-color"
+        ICON = "log:thread-icon"
+        NICKNAME = "log:user-nickname"
+        ADMINS = "log:thread-admins"
+        POLL = "log:thread-poll"
+        APPROVAL_MODE = "log:thread-approval-mode"
+        CALL = "log:thread-call"
+        NAME = "log:thread-name"
+        IMAGE = "log:thread-image"
+        PINNED = "log:thread-pinned-message"
+    

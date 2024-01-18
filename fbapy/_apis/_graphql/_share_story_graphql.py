@@ -1,4 +1,4 @@
-from .._utils import DefaultFuncs, parse_and_check_login
+from ..._utils import DefaultFuncs, parse_and_check_login
 import random
 import json
 import requests
@@ -49,8 +49,8 @@ FONT_IDS = [
     "1919119914775364", # Headline
 ]
 
-def share_story(default_funcs: DefaultFuncs, ctx: dict):
-    def share_story_graphql(story: str, preset_id: str = "401372137331149", font_id: str = "233490655168261"):
+def share_story_graphql(default_funcs: DefaultFuncs, ctx: dict):
+    def share_story(story: str, preset_id: str = "401372137331149", font_id: str = "233490655168261"):
 
         if preset_id not in PRESET_IDS:
             raise ValueError("Invalid preset_id")
@@ -93,4 +93,4 @@ def share_story(default_funcs: DefaultFuncs, ctx: dict):
 
         return parse_and_check_login(res, ctx, default_funcs)
 
-    return share_story_graphql
+    return share_story

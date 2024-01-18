@@ -1,11 +1,11 @@
-from .._utils import DefaultFuncs, parse_and_check_login
+from ..._utils import DefaultFuncs, parse_and_check_login
 import json
 import requests
 from io import BufferedReader
 from typing import Tuple
 
 
-def set_pfp(default_funcs: DefaultFuncs, ctx: dict):
+def set_pfp_graphql(default_funcs: DefaultFuncs, ctx: dict):
     def upload(avatar: Tuple[str, BufferedReader, str]):
         form = {}
 
@@ -23,7 +23,7 @@ def set_pfp(default_funcs: DefaultFuncs, ctx: dict):
         return parse_and_check_login(res, ctx, default_funcs)
 
 
-    def set_pfp_graph(avatar: Tuple[str, BufferedReader, str]):
+    def set_pfp(avatar: Tuple[str, BufferedReader, str]):
         up = upload(avatar)
         if "error" in up:
             raise up
@@ -69,4 +69,4 @@ def set_pfp(default_funcs: DefaultFuncs, ctx: dict):
 
         return parse_and_check_login(res, ctx, default_funcs)
 
-    return set_pfp_graph
+    return set_pfp

@@ -24,7 +24,7 @@ default_options = {
 
 class Client:
     def __init__(self) -> None:
-        self.session = Session()
+        self.__session = Session()
         self.options = default_options.copy()
         pass
 
@@ -39,7 +39,7 @@ class Client:
         appstateList = base64_decode(appstate)
 
         for each in appstateList:
-            self.session.cookies.set(
+            self.__session.cookies.set(
                 each["key"], each["value"], path=each["path"], domain=each["domain"]
             )
 
@@ -47,9 +47,9 @@ class Client:
             self.options[key] = options[key]
 
         url = "https://www.facebook.com/"
-        self.headers = get_headers(url, self.options)
+        self.__headers = get_headers(url, self.options)
 
-        res = self.session.get(url, headers=self.headers, timeout=60)
+        res = self.__session.get(url, headers=self.__headers, timeout=60)
 
         reg = r'<meta http-equiv="refresh" content="0;url=([^"]+)[^>]+>'
         pattern = re.compile(reg)
@@ -57,18 +57,18 @@ class Client:
         redirect = pattern.search(res.text)
         
         if redirect and redirect.group(1):
-            self.headers = get_headers(redirect.group(1), self.options)
-            res = self.session.get(redirect.group(1), headers=self.headers, timeout=60)
+            self.__headers = get_headers(redirect.group(1), self.options)
+            res = self.__session.get(redirect.group(1), headers=self.__headers, timeout=60)
 
-        if not self.is_login():
+        if not self.__is_login():
             return None
 
-        (ctx, defailt_funcs, api) = self.build_API(res.text)
+        (ctx, defailt_funcs, api) = self.__build_API(res.text)
 
         return api
 
-    def is_login(self):
-        user_id = self.get_user_id()
+    def __is_login(self):
+        user_id = self.__get_user_id()
         if not user_id:
             print(
                 "Error retrieving user_id. This can be caused by a lot of things, including getting blocked by Facebook for logging in from an unknown location. Try logging in with a browser to verify."
@@ -81,10 +81,10 @@ class Client:
 
         return True
 
-    def build_API(self, html: str) -> tuple[dict[str, any], DefaultFuncs, API]:
+    def __build_API(self, html: str) -> tuple[dict[str, any], DefaultFuncs, API]:
         cookies: list = []
 
-        for cookie in self.session.cookies:
+        for cookie in self.__session.cookies:
             if cookie.domain == "facebook.com":
                 cookies.append(
                     {
@@ -116,7 +116,7 @@ class Client:
             html,
         )
 
-        self.mqtt = {
+        self.__mqtt = {
             "iris_seq_id": None,
             "mqtt_endpoint": None,
             "region": None,
@@ -124,27 +124,27 @@ class Client:
         }
 
         if old_fb_mqtt_match is not None:
-            self.mqtt["iris_seq_id"] = old_fb_mqtt_match.group(1)
-            self.mqtt["mqtt_endpoint"] = old_fb_mqtt_match.group(2)
-            self.mqtt["region"] = (
-                parse_qs(urlparse(self.mqtt["mqtt_endpoint"]).query)
+            self.__mqtt["iris_seq_id"] = old_fb_mqtt_match.group(1)
+            self.__mqtt["mqtt_endpoint"] = old_fb_mqtt_match.group(2)
+            self.__mqtt["region"] = (
+                parse_qs(urlparse(self.__mqtt["mqtt_endpoint"]).query)
                 .get("region")[0]
                 .upper()
             )
-            print("Got this account's message region: " + self.mqtt["region"])
+            print("Got this account's message region: " + self.__mqtt["region"])
         elif new_fb_mqtt_match:
-            self.mqtt["iris_seq_id"] = new_fb_mqtt_match.group(2)
-            self.mqtt["mqtt_endpoint"] = re.sub(r"\\/", "/", new_fb_mqtt_match.group(1))
-            self.mqtt["region"] = (
-                parse_qs(urlparse(self.mqtt["mqtt_endpoint"]).query)
+            self.__mqtt["iris_seq_id"] = new_fb_mqtt_match.group(2)
+            self.__mqtt["mqtt_endpoint"] = re.sub(r"\\/", "/", new_fb_mqtt_match.group(1))
+            self.__mqtt["region"] = (
+                parse_qs(urlparse(self.__mqtt["mqtt_endpoint"]).query)
                 .get("region")[0]
                 .upper()
             )
-            print("Got this account's message region: " + self.mqtt["region"])
+            print("Got this account's message region: " + self.__mqtt["region"])
         elif legacy_fb_mqtt_match:
-            self.mqtt["mqtt_endpoint"] = legacy_fb_mqtt_match.group(4)
-            self.mqtt["region"] = (
-                parse_qs(urlparse(self.mqtt["mqtt_endpoint"]).query)
+            self.__mqtt["mqtt_endpoint"] = legacy_fb_mqtt_match.group(4)
+            self.__mqtt["region"] = (
+                parse_qs(urlparse(self.__mqtt["mqtt_endpoint"]).query)
                 .get("region")[0]
                 .upper()
             )
@@ -152,11 +152,11 @@ class Client:
             print(
                 "Cannot get sequence ID with new RegExp. Fallback to old RegExp (without seqID)..."
             )
-            print("Got this account's message region: " + self.mqtt["region"])
+            print("Got this account's message region: " + self.__mqtt["region"])
             print("[Unused] Polling endpoint: " + legacy_fb_mqtt_match.group(6))
         else:
             print("Cannot get MQTT endpoint")
-            self.mqtt["no_mqtt_data"] = html
+            self.__mqtt["no_mqtt_data"] = html
 
         ctx = {
             "user_id": self.user_id,
@@ -165,10 +165,10 @@ class Client:
             "access_token": None,
             "client_mutation_id": 0,
             "mqtt_client": None,
-            "last_seq_id": self.mqtt["iris_seq_id"],
+            "last_seq_id": self.__mqtt["iris_seq_id"],
             "sync_token": None,
-            "mqtt_endpoint": self.mqtt["mqtt_endpoint"],
-            "region": self.mqtt["region"],
+            "mqtt_endpoint": self.__mqtt["mqtt_endpoint"],
+            "region": self.__mqtt["region"],
             "first_listen": True,
             "options": self.options,
             "ws_task_number": 0,
@@ -176,15 +176,15 @@ class Client:
             "req_callbacks": {},
         }
 
-        default_funcs = DefaultFuncs(self.session, html, self.user_id, ctx)
+        default_funcs = DefaultFuncs(self.__session, html, self.user_id, ctx)
         api = API(default_funcs, ctx)
 
         return ctx, default_funcs, api
 
 
-    def get_user_id(self):
-        url_profile = self.session.get("https://www.facebook.com/me").url
-        profile = self.session.get(url_profile).text
+    def __get_user_id(self):
+        url_profile = self.__session.get("https://www.facebook.com/me").url
+        profile = self.__session.get(url_profile).text
         user_id = None
 
         # Attempt to extract user_id using the first pattern

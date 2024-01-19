@@ -39,11 +39,23 @@ If you encounter an error like this:
 You need to install libmagic.
 
 For Termux:
+
 ```bash
 pkg install sox
 ```
 
-For Other Platforms:
+For [replit.com](https://replit.com/), open `replit.nix` and add magic to the list of dependencies, for example:
+
+```nix
+{ pkgs }: {
+  deps = [
+    pkgs.python311Packages.magic
+  ];
+}
+```
+
+For Other Platforms, try installing `python-magic-bin`:
+
 ```bash
 pip install python-magic-bin==0.4.14
 ```
@@ -71,7 +83,7 @@ api = client.login(
 ### Send Message (HTTP Method)
 
 ```python
-api.send_message_http(
+api.http.send_message(
     msg="Hello World!",
     thread_id="0000000000000000",
 )

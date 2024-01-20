@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from typing import Callable
 import re
 import inspect
+import ssl
 
 
 def parse_delta(default_funcs: DefaultFuncs, ctx: dict, delta: dict) -> dict:
@@ -828,7 +829,7 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
 
         ctx["mqtt_client"] = c_mqtt
 
-        c_mqtt.tls_set()
+        c_mqtt.tls_set(certfile=None, keyfile=None, cert_reqs=ssl.CERT_NONE, tls_version=ssl.PROTOCOL_TLSv1_2)
         c_mqtt.tls_insecure_set(True)
 
         c_mqtt.on_connect = on_connect

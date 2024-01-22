@@ -759,11 +759,14 @@ def listen_mqtt(default_funcs: DefaultFuncs, ctx: dict):
             elif msg.topic == "/orca_presence":
                 if not ctx["options"]["update_presence"]:
                     for data in parsed["list"]:
+                        l=None
+                        if data.get("l"):
+                            l=int(data["l"]) * 1000
                         ctx["callback"](
                             {
                                 "type": "presence",
                                 "user_id": str(data["u"]),
-                                "timestamp": int(data["l"]) * 1000,
+                                "timestamp": l,
                                 "status": data["p"],
                             },
                             ctx["api"],
